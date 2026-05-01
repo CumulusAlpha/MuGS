@@ -7,10 +7,11 @@ Splatting rendering with MuJoCo Warp physics simulation.
 
 __version__ = "0.1.0"
 
-from mugs.sensors import GaussianSensor, GaussianSensorCfg
+# Phase 1: Core imports will be added as they're implemented
+# from mugs.sensors import GaussianSensor, GaussianSensorCfg
 
 __all__ = [
-    "GaussianSensor",
-    "GaussianSensorCfg",
+    # "GaussianSensor",  # Phase 2
+    # "GaussianSensorCfg",  # Phase 2
     "__version__",
 ]
