@@ -1,0 +1,139 @@
+{
+  "name": "kitchen_countertop",
+  "description": "Complete kitchen scene with 12 objects",
+  "objects": [
+    {
+      "name": "coffee_mug",
+      "type": "cylinder",
+      "position": [
+        -0.25,
+        0.15,
+        0.08
+      ],
+      "num_gaussians": 600,
+      "file": "coffee_mug.ply"
+    },
+    {
+      "name": "tea_cup",
+      "type": "cylinder",
+      "position": [
+        -0.1,
+        0.18,
+        0.06
+      ],
+      "num_gaussians": 484,
+      "file": "tea_cup.ply"
+    },
+    {
+      "name": "dinner_plate",
+      "type": "cylinder",
+      "position": [
+        0.05,
+        0.12,
+        0.04
+      ],
+      "num_gaussians": 784,
+      "file": "dinner_plate.ply"
+    },
+    {
+      "name": "side_plate",
+      "type": "cylinder",
+      "position": [
+        0.25,
+        0.15,
+        0.04
+      ],
+      "num_gaussians": 600,
+      "file": "side_plate.ply"
+    },
+    {
+      "name": "cereal_bowl",
+      "type": "bowl",
+      "position": [
+        -0.2,
+        -0.05,
+        0.06
+      ],
+      "num_gaussians": 700,
+      "file": "cereal_bowl.ply"
+    },
+    {
+      "name": "fruit_bowl",
+      "type": "bowl",
+      "position": [
+        0.0,
+        -0.08,
+        0.07
+      ],
+      "num_gaussians": 800,
+      "file": "fruit_bowl.ply"
+    },
+    {
+      "name": "water_glass",
+      "type": "cylinder",
+      "position": [
+        0.2,
+        -0.1,
+        0.09
+      ],
+      "num_gaussians": 484,
+      "file": "water_glass.ply"
+    },
+    {
+      "name": "wine_glass",
+      "type": "sphere",
+      "position": [
+        0.3,
+        -0.05,
+        0.06
+      ],
+      "num_gaussians": 400,
+      "file": "wine_glass.ply"
+    },
+    {
+      "name": "salt_shaker",
+      "type": "cylinder",
+      "position": [
+        -0.05,
+        0.02,
+        0.07
+      ],
+      "num_gaussians": 289,
+      "file": "salt_shaker.ply"
+    },
+    {
+      "name": "pepper_shaker",
+      "type": "cylinder",
+      "position": [
+        0.05,
+        0.0,
+        0.07
+      ],
+      "num_gaussians": 289,
+      "file": "pepper_shaker.ply"
+    },
+    {
+      "name": "red_apple",
+      "type": "sphere",
+      "position": [
+        -0.15,
+        -0.15,
+        0.05
+      ],
+      "num_gaussians": 400,
+      "file": "red_apple.ply"
+    },
+    {
+      "name": "orange",
+      "type": "sphere",
+      "position": [
+        0.15,
+        -0.18,
+        0.04
+      ],
+      "num_gaussians": 350,
+      "file": "orange.ply"
+    }
+  ],
+  "total_gaussians": 6180
+}
