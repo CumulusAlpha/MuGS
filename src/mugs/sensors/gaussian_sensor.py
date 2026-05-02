@@ -1,0 +1,395 @@
+"""
+GaussianSensor: 3DGS-based sensor for photorealistic rendering
+
+Implements hybrid rendering with:
+- 3DGS background (static or pretrained scenes)
+- MuJoCo foreground (physics-simulated objects/robots)
+- Segmentation-based compositing
+
+Author: MuGS Team
+Date: 2026-05-02
+"""
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional, List, Dict, Union
+import numpy as np
+import torch
+from plyfile import PlyData
+import mujoco
+
+try:
+    from gsplat import rasterization
+    GSPLAT_AVAILABLE = True
+except ImportError:
+    GSPLAT_AVAILABLE = False
+    print("Warning: gsplat not available, GaussianSensor will not work")
+
+
+@dataclass
+class GaussianSensorConfig:
+    """Configuration for GaussianSensor."""
+
+    # Resolution
+    width: int = 640
+    height: int = 480
+
+    # Camera parameters
+    fov_degrees: float = 60.0
+    camera_name: str = "main_camera"
+
+    # Background scene
+    background_ply_path: Optional[Path] = None
+    """Path to 3DGS background scene PLY file"""
+
+    # Rendering mode
+    render_mode: str = "hybrid"
+    """'hybrid', '3dgs_only', or 'mujoco_only'"""
+
+    # Robot masking
+    robot_geom_names: List[str] = field(default_factory=lambda: [
+        'base_link', 'shoulder_link', 'arm_link', 'forearm_link',
+        'palm', 'left_finger_link', 'right_finger_link'
+    ])
+    """MuJoCo geom names to extract as robot mask"""
+
+    # Performance
+    device: str = "cuda"
+    cache_background: bool = True
+    """Cache static 3DGS background for speed"""
+
+    # Super-resolution (future)
+    enable_sr: bool = False
+    sr_model_path: Optional[Path] = None
+
+
+class GaussianSensor:
+    """
+    Sensor for hybrid 3DGS + MuJoCo rendering.
+
+    Usage:
+        config = GaussianSensorConfig(
+            width=960,
+            height=640,
+            background_ply_path="data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply"
+        )
+        sensor = GaussianSensor(config)
+
+        # In simulation loop:
+        rgb = sensor.render(model, data, camera_name="main_camera")
+    """
+
+    def __init__(self, config: GaussianSensorConfig):
+        if not GSPLAT_AVAILABLE:
+            raise ImportError("gsplat is required for GaussianSensor")
+
+        self.cfg = config
+        self.device = torch.device(config.device)
+
+        # Load 3DGS background
+        if config.background_ply_path is not None:
+            print(f"[GaussianSensor] Loading background: {config.background_ply_path}")
+            self.background_gaussians = self._load_official_ply(config.background_ply_path)
+            print(f"  ✓ Loaded {len(self.background_gaussians['means']):,} Gaussians")
+        else:
+            self.background_gaussians = None
+            print("[GaussianSensor] No background scene loaded")
+
+        # Background cache
+        self._cached_background: Optional[np.ndarray] = None
+        self._cache_camera_params: Optional[Dict] = None
+
+        print(f"[GaussianSensor] Initialized:")
+        print(f"  - Resolution: {config.width}×{config.height}")
+        print(f"  - Mode: {config.render_mode}")
+        print(f"  - Device: {self.device}")
+
+    def render(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str,
+        return_components: bool = False
+    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        """
+        Render hybrid RGB image.
+
+        Args:
+            model: MuJoCo model
+            data: MuJoCo data (current simulation state)
+            camera_name: Camera name in MuJoCo model
+            return_components: If True, return dict with background/foreground/mask
+
+        Returns:
+            RGB image (H, W, 3) in range [0, 255] uint8
+            or dict with components if return_components=True
+        """
+        if self.cfg.render_mode == "mujoco_only":
+            return self._render_mujoco_only(model, data, camera_name)
+        elif self.cfg.render_mode == "3dgs_only":
+            return self._render_3dgs_only(model, data, camera_name)
+        else:  # hybrid
+            return self._render_hybrid(model, data, camera_name, return_components)
+
+    def _render_hybrid(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str,
+        return_components: bool
+    ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
+        """Hybrid rendering: 3DGS background + MuJoCo foreground."""
+
+        # 1. Render 3DGS background (cached if static)
+        camera_params = self._extract_camera_params(model, data, camera_name)
+
+        if self.cfg.cache_background and self._cached_background is not None:
+            if self._cameras_equal(camera_params, self._cache_camera_params):
+                background_rgb = self._cached_background
+            else:
+                background_rgb = self._render_3dgs_background(camera_params)
+                if self.cfg.cache_background:
+                    self._cached_background = background_rgb
+                    self._cache_camera_params = camera_params
+        else:
+            background_rgb = self._render_3dgs_background(camera_params)
+            if self.cfg.cache_background:
+                self._cached_background = background_rgb
+                self._cache_camera_params = camera_params
+
+        # 2. Render MuJoCo foreground + segmentation
+        foreground_rgb, seg_ids = self._render_mujoco_foreground(model, data, camera_name)
+
+        # 3. Extract robot mask
+        robot_mask = self._create_robot_mask(seg_ids, model)
+
+        # 4. Composite
+        composite_rgb = self._composite_images(background_rgb, foreground_rgb, robot_mask)
+
+        if return_components:
+            return {
+                'rgb': composite_rgb,
+                'background': background_rgb,
+                'foreground': foreground_rgb,
+                'mask': robot_mask
+            }
+        else:
+            return composite_rgb
+
+    def _render_3dgs_only(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str
+    ) -> np.ndarray:
+        """Render only 3DGS background."""
+        camera_params = self._extract_camera_params(model, data, camera_name)
+        return self._render_3dgs_background(camera_params)
+
+    def _render_mujoco_only(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str
+    ) -> np.ndarray:
+        """Render only MuJoCo (no 3DGS)."""
+        foreground_rgb, _ = self._render_mujoco_foreground(model, data, camera_name)
+        return foreground_rgb
+
+    # ─────────────────────────────────────────────────────────────
+    # Helper Methods: 3DGS Rendering
+    # ─────────────────────────────────────────────────────────────
+
+    def _load_official_ply(self, ply_path: Path) -> Dict[str, torch.Tensor]:
+        """Load official 3DGS PLY format with SH coefficients."""
+        plydata = PlyData.read(ply_path)
+        vertex = plydata['vertex']
+
+        # Positions
+        positions = np.stack([vertex['x'], vertex['y'], vertex['z']], axis=1)
+
+        # SH DC → RGB
+        SH_C0 = 0.28209479177387814
+        sh_dc = np.stack([vertex['f_dc_0'], vertex['f_dc_1'], vertex['f_dc_2']], axis=1)
+        colors = 0.5 + SH_C0 * sh_dc
+        colors = np.clip(colors, 0, 1)
+
+        # Opacity (sigmoid)
+        opacities = 1 / (1 + np.exp(-vertex['opacity']))
+
+        # Scales (exp)
+        scales = np.exp(np.stack([vertex['scale_0'], vertex['scale_1'], vertex['scale_2']], axis=1))
+
+        # Quaternions (normalize)
+        quats = np.stack([vertex['rot_0'], vertex['rot_1'], vertex['rot_2'], vertex['rot_3']], axis=1)
+        quats = quats / np.linalg.norm(quats, axis=1, keepdims=True)
+
+        # Convert to torch tensors on device
+        return {
+            'means': torch.from_numpy(positions).float().to(self.device),
+            'colors': torch.from_numpy(colors).float().to(self.device),
+            'opacities': torch.from_numpy(opacities).float().to(self.device),
+            'scales': torch.from_numpy(scales).float().to(self.device),
+            'quats': torch.from_numpy(quats).float().to(self.device),
+        }
+
+    def _extract_camera_params(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str
+    ) -> Dict:
+        """Extract camera parameters from MuJoCo."""
+        camera_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name)
+
+        # Position & rotation
+        camera_pos = data.cam_xpos[camera_id].copy()
+        camera_mat = data.cam_xmat[camera_id].reshape(3, 3).copy()
+
+        # Intrinsics (scale to target resolution)
+        fov_y = model.cam_fovy[camera_id]
+        fx = (self.cfg.width / 2) / np.tan(fov_y / 2)
+        fy = (self.cfg.height / 2) / np.tan(fov_y / 2)
+        cx = self.cfg.width / 2
+        cy = self.cfg.height / 2
+
+        return {
+            'position': camera_pos,
+            'rotation_matrix': camera_mat,
+            'fx': fx,
+            'fy': fy,
+            'cx': cx,
+            'cy': cy,
+        }
+
+    def _render_3dgs_background(self, camera_params: Dict) -> np.ndarray:
+        """Render 3DGS background using gsplat."""
+        if self.background_gaussians is None:
+            # No background, return black
+            return np.zeros((self.cfg.height, self.cfg.width, 3), dtype=np.uint8)
+
+        # Build view matrix (world → camera)
+        R = camera_params['rotation_matrix'].T  # Transpose for world→camera
+        t = -R @ camera_params['position']
+        view_matrix = np.eye(4, dtype=np.float32)
+        view_matrix[:3, :3] = R
+        view_matrix[:3, 3] = t
+
+        viewmat = torch.from_numpy(view_matrix).to(self.device)
+
+        # Camera intrinsics
+        fx, fy = float(camera_params['fx']), float(camera_params['fy'])
+        cx, cy = float(camera_params['cx']), float(camera_params['cy'])
+        K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32, device=self.device)
+
+        # Render with gsplat
+        render_colors, _, _ = rasterization(
+            means=self.background_gaussians['means'],
+            quats=self.background_gaussians['quats'],
+            scales=self.background_gaussians['scales'],
+            opacities=self.background_gaussians['opacities'],
+            colors=self.background_gaussians['colors'],
+            viewmats=viewmat[None],
+            Ks=K[None],
+            width=self.cfg.width,
+            height=self.cfg.height,
+            packed=False,
+        )
+
+        rgb = render_colors[0].clamp(0, 1)
+        return (rgb.cpu().numpy() * 255).astype(np.uint8)
+
+    # ─────────────────────────────────────────────────────────────
+    # Helper Methods: MuJoCo Rendering
+    # ─────────────────────────────────────────────────────────────
+
+    def _render_mujoco_foreground(
+        self,
+        model: mujoco.MjModel,
+        data: mujoco.MjData,
+        camera_name: str
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Render MuJoCo with RGB and segmentation."""
+        renderer = mujoco.Renderer(model, self.cfg.height, self.cfg.width)
+
+        mujoco.mj_forward(model, data)
+        renderer.update_scene(data, camera=camera_name)
+
+        # RGB
+        rgb = renderer.render()
+
+        # Segmentation
+        renderer.enable_segmentation_rendering()
+        seg = renderer.render()
+        renderer.disable_segmentation_rendering()
+
+        seg_ids = seg[:, :, 0].astype(np.int32)
+
+        renderer.close()
+
+        return rgb, seg_ids
+
+    def _create_robot_mask(
+        self,
+        seg_ids: np.ndarray,
+        model: mujoco.MjModel
+    ) -> np.ndarray:
+        """Create binary mask for robot geoms."""
+        mask = np.zeros_like(seg_ids, dtype=np.uint8)
+
+        for geom_name in self.cfg.robot_geom_names:
+            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+            if geom_id >= 0:
+                mask[seg_ids == geom_id] = 1
+
+        return mask
+
+    def _composite_images(
+        self,
+        background_rgb: np.ndarray,
+        foreground_rgb: np.ndarray,
+        mask: np.ndarray
+    ) -> np.ndarray:
+        """Alpha blend foreground onto background using mask."""
+        mask_3ch = mask[:, :, None].astype(np.float32)
+        composite = background_rgb * (1 - mask_3ch) + foreground_rgb * mask_3ch
+        return composite.astype(np.uint8)
+
+    # ─────────────────────────────────────────────────────────────
+    # Utility Methods
+    # ─────────────────────────────────────────────────────────────
+
+    def _cameras_equal(self, cam1: Optional[Dict], cam2: Optional[Dict]) -> bool:
+        """Check if two camera parameter dicts are equal."""
+        if cam1 is None or cam2 is None:
+            return False
+
+        return (
+            np.allclose(cam1['position'], cam2['position'], atol=1e-6) and
+            np.allclose(cam1['rotation_matrix'], cam2['rotation_matrix'], atol=1e-6) and
+            abs(cam1['fx'] - cam2['fx']) < 1e-3 and
+            abs(cam1['fy'] - cam2['fy']) < 1e-3
+        )
+
+    def clear_cache(self):
+        """Clear cached background."""
+        self._cached_background = None
+        self._cache_camera_params = None
+        print("[GaussianSensor] Cache cleared")
+
+    def get_stats(self) -> Dict:
+        """Get sensor statistics."""
+        stats = {
+            'config': {
+                'resolution': (self.cfg.width, self.cfg.height),
+                'mode': self.cfg.render_mode,
+                'device': str(self.device),
+            },
+            'background_loaded': self.background_gaussians is not None,
+            'cache_active': self._cached_background is not None,
+        }
+
+        if self.background_gaussians is not None:
+            stats['n_gaussians'] = len(self.background_gaussians['means'])
+
+        return stats
