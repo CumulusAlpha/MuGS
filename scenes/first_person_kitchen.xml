@@ -19,8 +19,12 @@
 
     <!-- First-person camera (Camera 117 from kitchen.ply) -->
     <!-- Directly in world frame for exact alignment -->
-    <camera name="wrist_cam" pos="1.563101 1.205030 -2.343449"
-            quat="0.937168 -0.042541 -0.276645 -0.208263" fovy="50"/>
+    <!-- FOV: 35.55° (from fx=3231.58, fy=3240.81, image=3115x2078) -->
+    <!-- xyaxes: xaxis (right) + yaxis (up), derived from rotation matrix -->
+    <camera name="wrist_cam"
+            pos="1.563101 1.205030 -2.343449"
+            xyaxes="0.760188 -0.366818 0.536245 0.413893 0.909633 0.035494"
+            fovy="35.55"/>
 
     <!-- Robot gripper in view (slightly below camera) -->
     <body name="wrist" pos="1.563101 1.205030 -2.543449">
