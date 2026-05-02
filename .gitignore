@@ -58,9 +58,8 @@ wandb/
 *.xml.bak
 external/
 
-# Pretrained model outputs
-outputs/pretrained_kitchen/
-outputs/pretrained_kitchen_benchmark/
+# Test and demo outputs (not tracked, 169+ images)
+outputs/
 
 # Downloaded pretrained models
 data/pretrained/
