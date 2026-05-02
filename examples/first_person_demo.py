@@ -73,22 +73,32 @@ def main():
 
     results = {}
 
+    # Load camera 117 parameters from kitchen.ply
+    import json
+    cam_params_path = Path(__file__).parent.parent / "data" / "pretrained" / "kitchen" / "cameras.json"
+    with open(cam_params_path) as f:
+        cameras = json.load(f)
+    cam117 = cameras[117]  # Use camera 117 that looks at tabletop
+
+    print(f"  Using Camera 117 from kitchen.ply training set")
+    print(f"    Position: {cam117['position']}")
+
     # 1. Hybrid mode (our result)
     print("  [1/3] Hybrid (3DGS background + MuJoCo foreground)...")
     sensor.cfg.render_mode = "hybrid"
-    result_hybrid = sensor.render(model, data, "wrist_cam", return_components=True)
+    result_hybrid = sensor.render(model, data, "wrist_cam", return_components=True, camera_params=cam117)
     results['hybrid'] = result_hybrid
 
-    # 2. MuJoCo only (baseline)
+    # 2. MuJoCo only (baseline) - use same camera params
     print("  [2/3] MuJoCo only (baseline)...")
     sensor.cfg.render_mode = "mujoco_only"
-    result_mujoco = sensor.render(model, data, "wrist_cam")
+    result_mujoco = sensor.render(model, data, "wrist_cam", camera_params=cam117)
     results['mujoco'] = {'rgb': result_mujoco}  # Wrap as dict
 
-    # 3. 3DGS only (background)
+    # 3. 3DGS only (background) - use same camera params
     print("  [3/3] 3DGS only (background)...")
     sensor.cfg.render_mode = "3dgs_only"
-    result_3dgs = sensor.render(model, data, "wrist_cam")
+    result_3dgs = sensor.render(model, data, "wrist_cam", camera_params=cam117)
     results['3dgs'] = {'rgb': result_3dgs}  # Wrap as dict
 
     # Visualization
