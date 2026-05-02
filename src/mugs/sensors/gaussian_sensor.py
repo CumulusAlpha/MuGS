@@ -6,6 +6,8 @@ Implements hybrid rendering with:
 - MuJoCo foreground (physics-simulated objects/robots)
 - Segmentation-based compositing
 
+Supports both standalone usage and mjlab integration.
+
 Author: MuGS Team
 Date: 2026-05-02
 """
@@ -17,6 +19,8 @@ import numpy as np
 import torch
 from plyfile import PlyData
 import mujoco
+
+from .base import SensorBase, is_mjlab_available
 
 try:
     from gsplat import rasterization
@@ -63,9 +67,13 @@ class GaussianSensorConfig:
     sr_model_path: Optional[Path] = None
 
 
-class GaussianSensor:
+class GaussianSensor(SensorBase):
     """
     Sensor for hybrid 3DGS + MuJoCo rendering.
+
+    Inherits from SensorBase for mjlab compatibility. Works in two modes:
+    - Standalone: when mjlab is not installed
+    - mjlab-integrated: when mjlab is available (auto-detected)
 
     Usage:
         config = GaussianSensorConfig(
@@ -77,9 +85,19 @@ class GaussianSensor:
 
         # In simulation loop:
         rgb = sensor.render(model, data, camera_name="main_camera")
+
+    mjlab usage:
+        # Same config, but environment will handle batching
+        from mjlab import Environment
+        env = Environment(model_path, sensors=[sensor])
+        obs = env.reset()  # sensor.render() called internally
     """
 
     def __init__(self, config: GaussianSensorConfig):
+        # Initialize base class if mjlab is available
+        if is_mjlab_available():
+            super().__init__()
+
         if not GSPLAT_AVAILABLE:
             raise ImportError("gsplat is required for GaussianSensor")
 
@@ -401,6 +419,29 @@ class GaussianSensor:
         return composite.astype(np.uint8)
 
     # ─────────────────────────────────────────────────────────────
+    # Properties (for base class compatibility)
+    # ─────────────────────────────────────────────────────────────
+
+    @property
+    def width(self) -> int:
+        """Sensor width in pixels."""
+        return self.cfg.width
+
+    @property
+    def height(self) -> int:
+        """Sensor height in pixels."""
+        return self.cfg.height
+
+    def get_observation_space(self) -> Dict:
+        """Get observation space specification (mjlab compatibility)."""
+        return {
+            'shape': (self.cfg.height, self.cfg.width, 3),
+            'dtype': np.uint8,
+            'low': 0,
+            'high': 255,
+        }
+
+    # ─────────────────────────────────────────────────────────────
     # Utility Methods
     # ─────────────────────────────────────────────────────────────
 
@@ -432,9 +473,14 @@ class GaussianSensor:
             },
             'background_loaded': self.background_gaussians is not None,
             'cache_active': self._cached_background is not None,
+            'mjlab_mode': is_mjlab_available(),
         }
 
         if self.background_gaussians is not None:
             stats['n_gaussians'] = len(self.background_gaussians['means'])
 
         return stats
+
+    def get_info(self) -> Dict:
+        """Get sensor info (mjlab compatibility alias for get_stats)."""
+        return self.get_stats()
