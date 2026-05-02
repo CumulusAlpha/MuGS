@@ -11,7 +11,15 @@
 
 ## Overview
 
-**MuGS** (MuJoCo Gaussian Splatting) enables training Vision-Language-Action (VLA) policies in photorealistic simulated environments with unprecedented scale:
+**MuGS** (MuJoCo Gaussian Splatting) enables training Vision-Language-Action (VLA) policies in photorealistic simulated environments with unprecedented scale.
+
+### Modular Architecture
+
+MuGS uses a **core + extension** design:
+- **mugs** (core package): Platform-agnostic 3DGS rendering engine
+- **mugs_mjlab** (extension package): MJLab integration with GaussianSensor API
+
+See [Project Architecture](docs/design/PROJECT_ARCHITECTURE.md) for details.
 
 - **10,000+ FPS** single camera, **374k FPS** batched (4096 envs) @ 160×120 ✅
 - **1,280 FPS** end-to-end hybrid pipeline (90× faster than target) ✅
