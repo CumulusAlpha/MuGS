@@ -514,10 +514,22 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         Returns:
             Camera poses (num_envs, 4, 4) on device
         """
-        # TODO: Extract from mjwarp.Data
-        # For now, placeholder - assume static camera
-        pose = torch.eye(4, device=self._device)
-        poses = pose[None].expand(self._num_envs, 4, 4).clone()
+        # Extract camera transforms from mjwarp.Data
+        # cam_xpos: (num_envs, ncam, 3) - camera positions
+        # cam_xmat: (num_envs, ncam, 9) - camera rotation matrices (row-major)
+
+        cam_pos = self._mjwarp_data.cam_xpos[:, self._camera_idx, :]  # (N, 3)
+        cam_mat = self._mjwarp_data.cam_xmat[:, self._camera_idx, :]  # (N, 9)
+
+        # Reshape rotation matrix from flat (9,) to (3, 3)
+        # MuJoCo stores row-major: [r00, r01, r02, r10, r11, r12, r20, r21, r22]
+        rot_matrices = cam_mat.reshape(self._num_envs, 3, 3)  # (N, 3, 3)
+
+        # Build 4×4 transformation matrices
+        poses = torch.eye(4, device=self._device).unsqueeze(0).expand(self._num_envs, 4, 4).clone()
+        poses[:, :3, :3] = rot_matrices  # Rotation
+        poses[:, :3, 3] = cam_pos         # Translation
+
         return poses
 
     def _create_robot_masks_batch(self, seg_batch: torch.Tensor) -> torch.Tensor:
