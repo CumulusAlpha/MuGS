@@ -109,7 +109,8 @@ class GaussianSensor:
         model: mujoco.MjModel,
         data: mujoco.MjData,
         camera_name: str,
-        return_components: bool = False
+        return_components: bool = False,
+        camera_params: Optional[Dict] = None
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """
         Render hybrid RGB image.
@@ -119,6 +120,9 @@ class GaussianSensor:
             data: MuJoCo data (current simulation state)
             camera_name: Camera name in MuJoCo model
             return_components: If True, return dict with background/foreground/mask
+            camera_params: Optional external camera params (from cameras.json).
+                          If provided, uses these for 3DGS rendering instead of MuJoCo camera.
+                          Expected keys: position, rotation, fx, fy, width, height
 
         Returns:
             RGB image (H, W, 3) in range [0, 255] uint8
@@ -127,21 +131,26 @@ class GaussianSensor:
         if self.cfg.render_mode == "mujoco_only":
             return self._render_mujoco_only(model, data, camera_name)
         elif self.cfg.render_mode == "3dgs_only":
-            return self._render_3dgs_only(model, data, camera_name)
+            return self._render_3dgs_only(model, data, camera_name, camera_params)
         else:  # hybrid
-            return self._render_hybrid(model, data, camera_name, return_components)
+            return self._render_hybrid(model, data, camera_name, return_components, camera_params)
 
     def _render_hybrid(
         self,
         model: mujoco.MjModel,
         data: mujoco.MjData,
         camera_name: str,
-        return_components: bool
+        return_components: bool,
+        camera_params: Optional[Dict] = None
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Hybrid rendering: 3DGS background + MuJoCo foreground."""
 
         # 1. Render 3DGS background (cached if static)
-        camera_params = self._extract_camera_params(model, data, camera_name)
+        if camera_params is None:
+            camera_params = self._extract_camera_params(model, data, camera_name)
+        else:
+            # Normalize external camera params to internal format
+            camera_params = self._normalize_camera_params(camera_params)
 
         if self.cfg.cache_background and self._cached_background is not None:
             if self._cameras_equal(camera_params, self._cache_camera_params):
@@ -180,10 +189,14 @@ class GaussianSensor:
         self,
         model: mujoco.MjModel,
         data: mujoco.MjData,
-        camera_name: str
+        camera_name: str,
+        camera_params: Optional[Dict] = None
     ) -> np.ndarray:
         """Render only 3DGS background."""
-        camera_params = self._extract_camera_params(model, data, camera_name)
+        if camera_params is None:
+            camera_params = self._extract_camera_params(model, data, camera_name)
+        else:
+            camera_params = self._normalize_camera_params(camera_params)
         return self._render_3dgs_background(camera_params)
 
     def _render_mujoco_only(
@@ -260,6 +273,38 @@ class GaussianSensor:
             'fy': fy,
             'cx': cx,
             'cy': cy,
+        }
+
+    def _normalize_camera_params(self, external_params: Dict) -> Dict:
+        """
+        Normalize external camera params (e.g., from cameras.json) to internal format.
+
+        External format (cameras.json):
+            position: [x, y, z]
+            rotation: [[r00, r01, r02], [r10, r11, r12], [r20, r21, r22]]
+            fx, fy: focal lengths
+            width, height: original resolution
+
+        Internal format:
+            position: np.array
+            rotation_matrix: np.array (3x3)
+            fx, fy: scaled to cfg.width/cfg.height
+            cx, cy: principal point
+        """
+        # Scale focal lengths to target resolution
+        orig_width = external_params.get('width', self.cfg.width)
+        orig_height = external_params.get('height', self.cfg.height)
+
+        fx = external_params['fx'] * (self.cfg.width / orig_width)
+        fy = external_params['fy'] * (self.cfg.height / orig_height)
+
+        return {
+            'position': np.array(external_params['position'], dtype=np.float32),
+            'rotation_matrix': np.array(external_params['rotation'], dtype=np.float32),
+            'fx': fx,
+            'fy': fy,
+            'cx': self.cfg.width / 2,
+            'cy': self.cfg.height / 2,
         }
 
     def _render_3dgs_background(self, camera_params: Dict) -> np.ndarray:
