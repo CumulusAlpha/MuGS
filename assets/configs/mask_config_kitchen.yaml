@@ -1,0 +1,30 @@
+# Kitchen Scene Mask Configuration
+# Defines which parts are rendered with MuJoCo vs 3DGS
+
+default_background: "3dgs"  # Render everything else with 3DGS
+
+groups:
+  # Robot arm and gripper (always MuJoCo for accurate physics)
+  - name: robot
+    geom_names:
+      - palm
+      - finger1_link
+      - finger2_link
+      - finger3_link
+      - finger4_link
+      - finger5_link
+    rendering_mode: mujoco
+    composite_priority: 10
+
+  # Table/support structure (can be MuJoCo or 3DGS)
+  - name: table
+    geom_prefix: "table_"
+    rendering_mode: mujoco
+    composite_priority: 1
+
+  # Floor plane
+  - name: floor
+    geom_names:
+      - floor
+    rendering_mode: mujoco
+    composite_priority: 0

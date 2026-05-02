@@ -56,3 +56,4 @@ wandb/
 
 # MuJoCo
 *.xml.bak
+external/
