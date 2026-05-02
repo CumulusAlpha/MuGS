@@ -195,6 +195,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         # 3DGS background
         self._gaussians: dict[str, torch.Tensor] | None = None
         self._cached_background: torch.Tensor | None = None
+        self._cached_camera_poses: torch.Tensor | None = None
 
         # MuJoCo rendering (for hybrid/mujoco_only)
         self._ctx: SensorContext | None = None
@@ -384,42 +385,40 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
                 device=self._device
             )
 
-        # Check cache
-        if self.cfg.cache_background and self._cached_background is not None:
-            # TODO: Verify camera poses haven't changed
-            return self._cached_background
-
         # Get camera poses for all environments
         camera_poses = self._get_camera_poses_batch()  # (N, 4, 4)
 
-        # Render each environment
-        # TODO: Optimize with batched gsplat when available
-        rgb_list = []
-        for env_id in range(self._num_envs):
-            rgb = self._render_3dgs_single(camera_poses[env_id])
-            rgb_list.append(rgb)
+        # Check cache and verify camera poses
+        if self.cfg.cache_background and self._cached_background is not None:
+            if self._cached_camera_poses is not None:
+                # Verify poses haven't changed
+                if torch.allclose(camera_poses, self._cached_camera_poses, atol=1e-6):
+                    return self._cached_background
+            # Poses changed or not cached - invalidate
 
-        rgb_batch = torch.stack(rgb_list)  # (N, H, W, 3)
+        # Batched rendering with gsplat
+        rgb_batch = self._render_3dgs_batch_optimized(camera_poses)
 
         # Cache if enabled
         if self.cfg.cache_background:
             self._cached_background = rgb_batch
+            self._cached_camera_poses = camera_poses.clone()
 
         return rgb_batch
 
-    def _render_3dgs_single(self, camera_pose: torch.Tensor) -> torch.Tensor:
-        """Render single 3DGS view.
+    def _render_3dgs_batch_optimized(self, camera_poses: torch.Tensor) -> torch.Tensor:
+        """Optimized batch 3DGS rendering with single gsplat call.
 
         Args:
-            camera_pose: (4, 4) camera-to-world transform
+            camera_poses: (num_envs, 4, 4) camera-to-world transforms
 
         Returns:
-            RGB image (H, W, 3) uint8
+            RGB batch (num_envs, H, W, 3) uint8 tensor
         """
-        # Build view matrix (world → camera)
-        view_matrix = torch.inverse(camera_pose)
+        # Build batch view matrices (world → camera)
+        view_matrices = torch.inverse(camera_poses)  # (N, 4, 4)
 
-        # Camera intrinsics
+        # Build batch camera intrinsics
         fov_y_rad = np.deg2rad(self.cfg.fov_degrees)
         fx = (self.cfg.width / 2) / np.tan(fov_y_rad / 2)
         fy = (self.cfg.height / 2) / np.tan(fov_y_rad / 2)
@@ -431,23 +430,25 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
             dtype=torch.float32,
             device=self._device
         )
+        Ks = K.unsqueeze(0).expand(self._num_envs, 3, 3)  # (N, 3, 3)
 
-        # Render with gsplat
+        # Single batched rasterization call
         render_colors, _, _ = rasterization(
             means=self._gaussians['means'],
             quats=self._gaussians['quats'],
             scales=self._gaussians['scales'],
             opacities=self._gaussians['opacities'],
             colors=self._gaussians['colors'],
-            viewmats=view_matrix[None],
-            Ks=K[None],
+            viewmats=view_matrices,  # (N, 4, 4) batch
+            Ks=Ks,                   # (N, 3, 3) batch
             width=self.cfg.width,
             height=self.cfg.height,
             packed=False,
         )
 
-        rgb = render_colors[0].clamp(0, 1)
-        return (rgb * 255).to(torch.uint8)
+        # Convert to uint8
+        rgb_batch = render_colors.clamp(0, 1)
+        return (rgb_batch * 255).to(torch.uint8)
 
     def _render_mujoco_batch(self) -> tuple[torch.Tensor, torch.Tensor]:
         """Render MuJoCo foregrounds for all environments via SensorContext.
