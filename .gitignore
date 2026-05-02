@@ -57,3 +57,11 @@ wandb/
 # MuJoCo
 *.xml.bak
 external/
+
+# Pretrained model outputs
+outputs/pretrained_kitchen/
+outputs/pretrained_kitchen_benchmark/
+
+# Downloaded pretrained models
+data/pretrained/
+data/pretrained_models.zip
