@@ -232,6 +232,8 @@ mjlab-3dgs-vla/
 - **[API Reference](docs/api/API_REFERENCE.md)** - Complete API documentation
 - **[Implementation Guide](docs/guides/IMPLEMENTATION.md)** - Step-by-step development guide
 - **[Asset Format Spec](docs/design/ASSET_FORMAT.md)** - 3DGS asset specifications
+- **[Pretrained Models Guide](docs/guides/PRETRAINED_MODELS.md)** - Download and use pretrained 3DGS models
+- **[Coordinate Alignment Guide](docs/technical/COORDINATE_ALIGNMENT.md)** - MuJoCo/3DGS coordinate systems
 
 ---
 
