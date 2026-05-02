@@ -278,9 +278,10 @@ class GaussianSensor(SensorBase):
         camera_mat = data.cam_xmat[camera_id].reshape(3, 3).copy()
 
         # Intrinsics (scale to target resolution)
-        fov_y = model.cam_fovy[camera_id]
-        fx = (self.cfg.width / 2) / np.tan(fov_y / 2)
-        fy = (self.cfg.height / 2) / np.tan(fov_y / 2)
+        # Note: model.cam_fovy is in radians (affected by <compiler angle="radian"/>)
+        fov_y_radians = model.cam_fovy[camera_id]
+        fx = (self.cfg.width / 2) / np.tan(fov_y_radians / 2)
+        fy = (self.cfg.height / 2) / np.tan(fov_y_radians / 2)
         cx = self.cfg.width / 2
         cy = self.cfg.height / 2
 
@@ -332,7 +333,11 @@ class GaussianSensor(SensorBase):
             return np.zeros((self.cfg.height, self.cfg.width, 3), dtype=np.uint8)
 
         # Build view matrix (world → camera)
-        R = camera_params['rotation_matrix'].T  # Transpose for world→camera
+        # MuJoCo uses +Z forward, OpenGL/3DGS uses -Z forward
+        R_cam = camera_params['rotation_matrix'].copy()
+        R_cam[:, 2] = -R_cam[:, 2]  # Flip Z axis
+
+        R = R_cam.T  # Transpose for world→camera
         t = -R @ camera_params['position']
         view_matrix = np.eye(4, dtype=np.float32)
         view_matrix[:3, :3] = R
