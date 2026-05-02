@@ -45,10 +45,16 @@ def main():
     model = mujoco.MjModel.from_xml_path(str(scene_path))
     data = mujoco.MjData(model)
 
-    # Robot geoms (gripper parts)
-    robot_geoms = ['gripper_base', 'gripper_left', 'gripper_right']
+    # Foreground geoms (all MuJoCo objects to render: gripper + desktop items)
+    foreground_geoms = [
+        'gripper_base', 'gripper_left', 'gripper_right',  # Gripper
+        'mug_body', 'mug_handle',  # Red mug
+        'bowl_geom',  # Blue bowl
+        'plate_geom',  # White plate
+        'apple_geom',  # Green apple
+    ]
 
-    print(f"✅ Robot geoms: {robot_geoms}")
+    print(f"✅ Foreground geoms: {len(foreground_geoms)} objects")
 
     # Create sensor with 3DGS background
     print("\n" + "=" * 80)
@@ -60,7 +66,7 @@ def main():
         height=480,
         background_ply_path=ply_path,
         render_mode="hybrid",
-        robot_geom_names=robot_geoms,
+        robot_geom_names=foreground_geoms,  # All objects in foreground
     )
     sensor = GaussianSensor(config)
 
