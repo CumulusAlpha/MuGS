@@ -1,6 +1,15 @@
 # MuGS: MuJoCo + 3D Gaussian Splatting for Photorealistic Robot Simulation
 
-Hybrid rendering pipeline combining MuJoCo physics simulation with 3D Gaussian Splatting photorealistic backgrounds.
+**MuGS** is a hybrid rendering pipeline that combines MuJoCo physics simulation with 3D Gaussian Splatting (3DGS) photorealistic backgrounds to create photo-realistic robot simulation environments for Vision-Language-Action (VLA) model training and evaluation.
+
+## What is MuGS?
+
+MuGS enables **photorealistic robot simulation** by compositing physically accurate MuJoCo robot renders with real-world 3DGS backgrounds at **5000+ FPS**. It bridges the Sim2Real gap for vision-based robot learning by providing training data that looks like real photos while maintaining perfect physics simulation.
+
+**Key Innovation**: Two-stage rendering pipeline
+- **Stage 1**: MuJoCo renders robot/objects (CPU-based, fast)
+- **Stage 2**: 3DGS renders background (GPU-based, photorealistic)
+- **Compositing**: Alpha-blending with automatic segmentation masks
 
 ![MuGS Showcase](showcase.jpg)
 
@@ -88,37 +97,76 @@ AndroidTwin repo and uses MuGS's standalone `GaussianSensor` API.
 
 ## Features
 
-- **Hybrid Rendering**: 3DGS background + MuJoCo foreground @ 5000 FPS
-- **Physics-Accurate**: Full MuJoCo physics simulation
-- **Photorealistic**: 3D Gaussian Splatting for realistic backgrounds
+### Core Rendering
+- **Hybrid Rendering**: 3DGS background + MuJoCo foreground @ 5000+ FPS
+- **Physics-Accurate**: Full MuJoCo physics simulation with contact dynamics
+- **Photorealistic**: 3D Gaussian Splatting for realistic backgrounds from real-world scans
 - **Camera Aligned**: Automatic camera parameter extraction and coordinate system conversion
-- **Easy Integration**: Drop-in sensor for mjlab/IsaacLab environments
-- **Super-Resolution**: Optional AI upscaling (320×240 → 1280×960) for photorealistic detail
+- **Flexible Modes**: `hybrid`, `3dgs_only`, `mujoco_only` rendering modes
+
+### Integration & Usability
+- **Easy Integration**: Drop-in `GaussianSensor` API for standalone use
+- **Batch Rendering**: mjlab integration for parallel multi-environment rendering
+- **Automatic Masking**: Body-prefix or geom-name based foreground segmentation
+- **Camera Tracking**: Dynamic background camera follows MuJoCo camera motion
+
+### Post-Processing (Optional)
+- **Super-Resolution**: AI upscaling (Real-ESRGAN) for photorealistic detail
+  - Low-res rendering (320×240) → High-res output (1280×960)
+  - 4x upscaling with photorealistic texture enhancement
+  - Modular design: lazy-loaded, GPU-accelerated, batch processing support
+
+### Asset Support
+- **Pretrained Scenes**: INRIA kitchen (mip-NeRF 360 dataset)
+- **External Assets**: GS-Playground scenes, DISCOVERSE tasks (via download scripts)
+- **Custom Scenes**: Support for any 3DGS PLY files from COLMAP/Nerfstudio
 
 ## Quick Start
+
+### Basic Rendering
 
 ```python
 from mugs.sensors import GaussianSensor, GaussianSensorConfig
 
-# Configure sensor
+# 1. Configure sensor
 config = GaussianSensorConfig(
     width=640,
     height=480,
     background_ply_path="path/to/point_cloud.ply",
-    render_mode="hybrid",
+    render_mode="hybrid",  # "hybrid" | "3dgs_only" | "mujoco_only"
     robot_geom_names=["link1", "link2", "gripper"],
 )
 
 sensor = GaussianSensor(config)
 
-# Render
+# 2. Render
 result = sensor.render(model, data, camera_name, return_components=True)
 
-# Access components
-rgb = result['rgb']              # Final hybrid image
+# 3. Access components
+rgb = result['rgb']              # Final hybrid image (H, W, 3) uint8
 foreground = result['foreground'] # MuJoCo only
 background = result['background'] # 3DGS only
 mask = result['mask']            # Blending mask
+```
+
+### With Super-Resolution (Optional)
+
+```python
+from mugs.postprocess import SuperResolution, SuperResolutionConfig
+
+# 1. Low-res rendering (fast)
+sensor = GaussianSensor(GaussianSensorConfig(width=320, height=240, ...))
+img_lr = sensor.render(model, data, camera_name)  # 320×240
+
+# 2. AI upscaling (photorealistic)
+sr = SuperResolution(SuperResolutionConfig(
+    model_name="RealESRGAN_x4plus",
+    scale=4,
+))
+img_hr = sr.upscale(img_lr)  # 1280×960
+
+# Installation: pip install realesrgan basicsr
+# Download model: python scripts/download_sr_models.py --model RealESRGAN_x4plus
 ```
 
 ## Demos
@@ -194,12 +242,21 @@ See `docs/CAMERA_ALIGNMENT_FIX.md` for details.
 
 ## Documentation
 
-- `docs/DESIGN.md` - System architecture and design decisions
-- `docs/CAMERA_ALIGNMENT_FIX.md` - Camera parameter handling
-- `docs/SHOWCASE.md` - Creating demonstration materials
-- `docs/SUPER_RESOLUTION.md` - AI upscaling guide
-- `docs/EXTERNAL_ASSETS.md` - Using GS-Playground, DISCOVERSE assets
-- `docs/TODO.md` - Development roadmap
+### Getting Started
+- **[`docs/OVERVIEW.md`](docs/OVERVIEW.md)** - 📘 Project overview (what MuGS does, repo structure, use cases)
+- **[`docs/API_QUICKSTART.md`](docs/API_QUICKSTART.md)** - 🚀 Quick start guide (中文)
+- **[`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)** - 📖 Complete API reference
+
+### Technical Guides
+- **[`docs/SUPER_RESOLUTION.md`](docs/SUPER_RESOLUTION.md)** - 🎨 AI upscaling guide (Real-ESRGAN)
+- **[`docs/CAMERA_ALIGNMENT_FIX.md`](docs/CAMERA_ALIGNMENT_FIX.md)** - 📐 Camera parameter handling
+- **[`docs/EXTERNAL_ASSETS.md`](docs/EXTERNAL_ASSETS.md)** - 📦 Using GS-Playground, DISCOVERSE assets
+- **[`docs/SHOWCASE.md`](docs/SHOWCASE.md)** - 🎬 Creating demonstration materials
+
+### Design & Status
+- **[`docs/design/DESIGN.md`](docs/design/DESIGN.md)** - 🏗️ System architecture (12k words)
+- **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)** - 📊 Current status
+- **[`TODO.md`](TODO.md)** - 📋 Development roadmap
 
 ## Requirements
 

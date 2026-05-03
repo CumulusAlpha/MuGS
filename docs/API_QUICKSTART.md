@@ -305,6 +305,63 @@ for epoch in range(100):
 
 ---
 
+### 场景 5: 超分辨率渲染 (可选)
+
+```python
+from mugs.sensors import GaussianSensor, GaussianSensorConfig
+from mugs.postprocess import SuperResolution, SuperResolutionConfig
+
+# 1. 低分辨率传感器 (快速渲染)
+sensor = GaussianSensor(GaussianSensorConfig(
+    width=320,
+    height=240,
+    background_ply_path="data/pretrained/kitchen/point_cloud.ply",
+    render_mode="hybrid",
+    robot_geom_names=['link1', 'link2'],
+))
+
+# 2. 超分辨率模块 (可选)
+sr = SuperResolution(SuperResolutionConfig(
+    model_name="RealESRGAN_x4plus",  # 推荐模型
+    scale=4,                          # 4x 放大
+    device="cuda",
+    fp16=True,                        # FP16 加速
+))
+
+# 3. 训练时: 低分辨率 (快)
+for step in range(1000):
+    mujoco.mj_step(model, data)
+    obs_lr = sensor.render(model, data, "camera")  # 320×240
+    action = policy(obs_lr)
+    # 训练...
+
+# 4. 评估时: 高分辨率 (照片级)
+for step in range(100):
+    mujoco.mj_step(model, data)
+    obs_lr = sensor.render(model, data, "camera")  # 320×240
+    obs_hr = sr.upscale(obs_lr)                     # 1280×960
+    save_frame(obs_hr)  # 保存高质量视频
+
+# 批量超分
+imgs_lr = [sensor.render(model, data, "camera") for _ in range(100)]
+imgs_hr = sr.batch_upscale(imgs_lr, show_progress=True)  # 带进度条
+```
+
+**效果对比**:
+- 低分辨率 (320×240): 模糊但快 (~5000 FPS)
+- 双线性插值 (1280×960): 简单放大，仍然模糊
+- Real-ESRGAN 4x (1280×960): 锐利且照片级真实感 (~10 FPS)
+
+**安装**:
+```bash
+pip install realesrgan basicsr
+python scripts/download_sr_models.py --model RealESRGAN_x4plus
+```
+
+**文档**: 详见 `docs/SUPER_RESOLUTION.md`
+
+---
+
 ## 🔧 高级用法
 
 ### 外部相机参数 (解决相机对齐)
