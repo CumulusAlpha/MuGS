@@ -55,6 +55,23 @@ TORCH_CUDA_ARCH_LIST="8.6" python examples/quality_comparison_demo.py
 TORCH_CUDA_ARCH_LIST="8.6" python examples/yam_wrist_camera_demo.py
 ```
 
+### Using External Assets
+```bash
+# List available external asset sources
+python scripts/download_external_assets.py list
+
+# Download GS-Playground assets
+python scripts/download_external_assets.py gs-playground
+
+# Download Bridge-GS dataset
+python scripts/download_external_assets.py bridge-gs
+
+# Run examples with external assets
+TORCH_CUDA_ARCH_LIST="8.6" python examples/use_external_assets.py
+```
+
+See `docs/EXTERNAL_ASSETS.md` for detailed tutorial.
+
 ## Performance
 
 - **Resolution**: 640×480
