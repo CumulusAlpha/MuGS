@@ -93,6 +93,7 @@ AndroidTwin repo and uses MuGS's standalone `GaussianSensor` API.
 - **Photorealistic**: 3D Gaussian Splatting for realistic backgrounds
 - **Camera Aligned**: Automatic camera parameter extraction and coordinate system conversion
 - **Easy Integration**: Drop-in sensor for mjlab/IsaacLab environments
+- **Super-Resolution**: Optional AI upscaling (320×240 → 1280×960) for photorealistic detail
 
 ## Quick Start
 
@@ -135,6 +136,18 @@ TORCH_CUDA_ARCH_LIST="8.6" python examples/quality_comparison_demo.py
 ### Wrist Camera (Task View)
 ```bash
 TORCH_CUDA_ARCH_LIST="8.6" python examples/yam_wrist_camera_demo.py
+```
+
+### Super-Resolution Pipeline
+```bash
+# 1. Install SR dependencies
+pip install realesrgan basicsr
+
+# 2. Download pretrained models
+python scripts/download_sr_models.py --model RealESRGAN_x4plus
+
+# 3. Run demo
+TORCH_CUDA_ARCH_LIST="8.6" python examples/sr_pipeline_demo.py
 ```
 
 ### Using External Assets
@@ -184,6 +197,8 @@ See `docs/CAMERA_ALIGNMENT_FIX.md` for details.
 - `docs/DESIGN.md` - System architecture and design decisions
 - `docs/CAMERA_ALIGNMENT_FIX.md` - Camera parameter handling
 - `docs/SHOWCASE.md` - Creating demonstration materials
+- `docs/SUPER_RESOLUTION.md` - AI upscaling guide
+- `docs/EXTERNAL_ASSETS.md` - Using GS-Playground, DISCOVERSE assets
 - `docs/TODO.md` - Development roadmap
 
 ## Requirements
