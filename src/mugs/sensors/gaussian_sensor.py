@@ -57,6 +57,9 @@ class GaussianSensorConfig:
     ])
     """MuJoCo geom names to extract as robot mask"""
 
+    robot_geom_ids: Optional[List[int]] = None
+    """MuJoCo geom IDs to extract as robot mask (alternative to names)"""
+
     # Performance
     device: str = "cuda"
     cache_background: bool = True
@@ -405,10 +408,17 @@ class GaussianSensor(SensorBase):
         """Create binary mask for robot geoms."""
         mask = np.zeros_like(seg_ids, dtype=np.uint8)
 
-        for geom_name in self.cfg.robot_geom_names:
-            geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
-            if geom_id >= 0:
-                mask[seg_ids == geom_id] = 1
+        # Use geom IDs if provided (useful when geoms lack names)
+        if self.cfg.robot_geom_ids is not None:
+            for geom_id in self.cfg.robot_geom_ids:
+                if 0 <= geom_id < model.ngeom:
+                    mask[seg_ids == geom_id] = 1
+        else:
+            # Fall back to geom names
+            for geom_name in self.cfg.robot_geom_names:
+                geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+                if geom_id >= 0:
+                    mask[seg_ids == geom_id] = 1
 
         return mask
 
