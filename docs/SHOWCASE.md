@@ -4,6 +4,11 @@ This directory contains scripts and examples for generating demonstration materi
 
 ## Generated Materials
 
+### AndroidTwin × G1 hybrid (`showcase/androidtwin_g1/`)
+Unitree G1 humanoid in the INRIA kitchen scene — pipeline panel,
+static-vs-tracked bg comparison, and 16-frame animation. See
+[`showcase/androidtwin_g1/README.md`](../showcase/androidtwin_g1/README.md).
+
 ### Static Showcase Image
 **File**: `mugs_showcase.jpg`
 

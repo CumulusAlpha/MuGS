@@ -4,6 +4,17 @@ Hybrid rendering pipeline combining MuJoCo physics simulation with 3D Gaussian S
 
 ![MuGS Showcase](showcase.jpg)
 
+### AndroidTwin × MuGS — G1 humanoid in INRIA kitchen
+
+![AndroidTwin G1 hybrid pipeline](showcase/androidtwin_g1/panel_pipeline.png)
+![AndroidTwin G1 hybrid tracking](showcase/androidtwin_g1/panel_tracking.png)
+
+Unitree G1 (53 dof, Inspire FTP hands) on the `p1_amo_table_grasp`
+bench composited on the INRIA *kitchen* 3DGS scene; bg cam tracks
+MuJoCo head_cam delta from an initial-aligned pose. See
+[`showcase/androidtwin_g1/`](showcase/androidtwin_g1/README.md) for
+the full write-up + animation.
+
 ## Features
 
 - **Hybrid Rendering**: 3DGS background + MuJoCo foreground @ 5000 FPS
