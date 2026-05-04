@@ -28,7 +28,7 @@ OUTPUT_DIR = Path(__file__).parent.parent.parent / "outputs" / "kitchen_demo"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
-SCENE_DIR = PROJECT_ROOT / "assets" / "scenes" / "kitchen"
+SCENE_DIR = PROJECT_ROOT / "assets" / "scenes" / "demo_kitchen"
 
 WIDTH = 800
 HEIGHT = 600

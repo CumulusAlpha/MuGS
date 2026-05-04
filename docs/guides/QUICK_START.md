@@ -67,7 +67,7 @@ python examples/basic/render_single_view.py
 ```
 
 **What this does**:
-1. Loads a sample 3DGS object (`assets/objects/kitchen/mug_blue.ply`)
+1. Loads a sample 3DGS object (`assets/objects/demo_kitchen/mug_blue.ply`)
 2. Renders from a single camera viewpoint
 3. Saves image to `outputs/render_single_view.png`
 
@@ -201,7 +201,7 @@ from mugs.sensors import GaussianSensor, GaussianSensorCfg
 config = GaussianSensorCfg(
     resolution=(160, 120),
     num_cameras=4096,
-    asset_path="assets/objects/kitchen/mug_blue.ply"
+    asset_path="assets/objects/demo_kitchen/mug_blue.ply"
 )
 sensor = GaussianSensor(config)
 
@@ -309,7 +309,7 @@ flake8 src/ tests/
 
 ```bash
 # 1. Place PLY file
-cp /path/to/object.ply assets/objects/kitchen/
+cp /path/to/object.ply assets/objects/demo_kitchen/
 
 # 2. Create metadata
 cat > assets/configs/kitchen/object.yaml <<EOF
@@ -422,7 +422,7 @@ nvidia-smi
 python -c "import mugs, torch, gsplat; print('✅ All imports OK')"
 
 # Check assets
-ls -lh assets/objects/kitchen/
+ls -lh assets/objects/demo_kitchen/
 ```
 
 ### Common Issues

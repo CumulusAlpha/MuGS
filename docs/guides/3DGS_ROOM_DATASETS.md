@@ -183,7 +183,7 @@ python train.py -s ../data/360_v2/kitchen -m output/kitchen
 
 # Step 4: 提取PLY
 cp output/kitchen/point_cloud/iteration_30000/point_cloud.ply \
-   /home/ununtu/metabot-workspace/mugs/assets/scenes/kitchen_real.ply
+   /home/ununtu/metabot-workspace/mugs/data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply
 ```
 
 **时间**: ~1-2小时（取决于GPU）

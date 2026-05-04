@@ -213,7 +213,7 @@ def update_object_gaussians(gaussians_dict, model, data):
 ### 配置文件示例
 
 ```yaml
-# assets/scenes/kitchen_layout.yaml
+# assets/scenes/demo_kitchen/layout.yaml
 
 scene:
   coordinate_system: "mujoco"  # or "opengl"

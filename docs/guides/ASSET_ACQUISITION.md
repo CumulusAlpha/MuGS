@@ -619,8 +619,8 @@ ns-train splatfacto \
 ```bash
 # Prune low-opacity Gaussians
 python scripts/data_collection/prune_gaussians.py \
-    --input assets/objects/kitchen/mug.ply \
-    --output assets/objects/kitchen/mug_pruned.ply \
+    --input assets/objects/demo_kitchen/mug.ply \
+    --output assets/objects/demo_kitchen/mug_pruned.ply \
     --opacity-threshold 0.1  # Remove α < 0.1
 
 # Typical size reduction: 50-70%

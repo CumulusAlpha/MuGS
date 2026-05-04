@@ -105,7 +105,7 @@ from mugs_mjlab import GaussianSensorCfg
 env_cfg = MyEnvCfg()
 env_cfg.scene.sensors["rgb_camera"] = GaussianSensorCfg(
     resolution=(640, 480),
-    scene_ply="assets/scenes/kitchen.ply",
+    scene_ply="assets/scenes/demo_kitchen/kitchen_scene.json",
     mask_config="assets/configs/mask_config_kitchen.yaml",
     update_rate=30.0  # Hz
 )

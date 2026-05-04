@@ -142,7 +142,7 @@ def download_mipnerf360(output_dir: Path, scenes: list = None):
     print()
     print("# Copy trained model")
     print("cp output/kitchen/point_cloud/iteration_30000/point_cloud.ply \\")
-    print("   /home/ununtu/metabot-workspace/mugs/assets/scenes/kitchen_real.ply")
+    print("   /home/ununtu/metabot-workspace/mugs/data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply")
     print()
     print()
     print("Option 2: Download pre-trained models (faster)")

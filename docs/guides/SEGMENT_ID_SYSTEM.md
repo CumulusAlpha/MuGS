@@ -726,7 +726,7 @@ from mugs.utils import MaskConfig
 sensor_cfg = GaussianSensorCfg(
     camera_name="camera1",
     resolution=(640, 480),
-    scene_ply="assets/scenes/kitchen.ply",
+    scene_ply="assets/scenes/demo_kitchen/kitchen_scene.json",
     mask_config="assets/configs/mask_config_kitchen.yaml",
     device="cuda"
 )

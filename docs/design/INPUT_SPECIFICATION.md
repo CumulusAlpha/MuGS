@@ -34,7 +34,7 @@
 
 **文件结构**:
 ```
-assets/objects/kitchen/mug_blue.ply
+assets/objects/demo_kitchen/mug_blue.ply
 ```
 
 **PLY 文件示例** (二进制格式):
@@ -678,7 +678,7 @@ config = GaussianSensorCfg(
 sensor = GaussianSensor(config)
 
 # 2. 加载单个对象
-sensor.load_object("assets/objects/kitchen/mug_blue.ply")
+sensor.load_object("assets/objects/demo_kitchen/mug_blue.ply")
 
 # 3. 设置相机位姿
 camera_pose = torch.tensor([

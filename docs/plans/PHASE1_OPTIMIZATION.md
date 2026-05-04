@@ -140,7 +140,7 @@ python train.py \
 
 # 3. 复制PLY
 cp ../../outputs/kitchen_trained/point_cloud/iteration_30000/point_cloud.ply \
-   ../../assets/scenes/kitchen_real.ply
+   ../../data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply
 ```
 
 **时间**: ~1-2小时训练（RTX 4090）
@@ -157,7 +157,7 @@ def load_room_scene(scene_path):
     return {'kitchen_room': gaussians}
 
 # 使用
-room_gaussians = load_room_scene('assets/scenes/kitchen_real.ply')
+room_gaussians = load_room_scene('data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply')
 gs_rgb = render_3dgs(room_gaussians, camera_params)
 ```
 
@@ -206,9 +206,9 @@ def main():
     
     # Load scene (objects or room)
     if args.scene == 'objects':
-        gaussians = load_multi_objects('assets/scenes/kitchen/')
+        gaussians = load_multi_objects('assets/scenes/demo_kitchen/')
     else:
-        gaussians = load_room_scene('assets/scenes/kitchen_real.ply')
+        gaussians = load_room_scene('data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply')
     
     # Render
     render_hybrid_scene(gaussians, args.camera, args.output)
@@ -229,7 +229,7 @@ def render_hybrid_scene(gaussians: dict, camera_name: str, output_dir: Path):
         Composite RGB image (H, W, 3)
     
     Example:
-        >>> gaussians = load_multi_objects('assets/scenes/kitchen/')
+        >>> gaussians = load_multi_objects('assets/scenes/demo_kitchen/')
         >>> img = render_hybrid_scene(gaussians, 'overview', 'outputs/')
     """
     ...
