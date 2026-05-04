@@ -11,7 +11,7 @@ MuGS enables **photorealistic robot simulation** by compositing physically accur
 - **Stage 2**: 3DGS renders background (GPU-based, photorealistic)
 - **Compositing**: Alpha-blending with automatic segmentation masks
 
-![MuGS Showcase](showcase.jpg)
+![MuGS Showcase](docs/images/showcase.jpg)
 
 ### AndroidTwin × MuGS — G1 humanoid in INRIA kitchen
 
@@ -24,7 +24,7 @@ whole-body controller, head_cam first-person view), zero-policy
 
 #### Pipeline — body-prefix masking
 
-![pipeline](showcase/androidtwin_g1/panel_pipeline.png)
+![pipeline](docs/images/showcase/androidtwin_g1/panel_pipeline.png)
 
 `scene_inspire.xml` leaves geoms unnamed, so the recorder resolves
 foreground pixels by **body name prefix** instead of geom name.
@@ -40,7 +40,7 @@ matches one of the configured prefixes joins the fg mask.
 
 #### Hybrid render — bg cam tracks MuJoCo head
 
-![tracking](showcase/androidtwin_g1/panel_tracking.png)
+![tracking](docs/images/showcase/androidtwin_g1/panel_tracking.png)
 
 3DGS scenes live in COLMAP world frames disjoint from MuJoCo world.
 The recorder pins the **initial** GS bg pose to a training cam
@@ -58,7 +58,7 @@ R_t     = R_align · R_mj_t
 
 #### Static vs tracked background
 
-![before/after](showcase/androidtwin_g1/panel_before_after.png)
+![before/after](docs/images/showcase/androidtwin_g1/panel_before_after.png)
 
 Same MuJoCo frame, two bg policies:
 
@@ -69,7 +69,7 @@ Same MuJoCo frame, two bg policies:
 
 #### Animation
 
-![hybrid tracking gif](showcase/androidtwin_g1/hybrid_tracking.gif)
+![hybrid tracking gif](docs/images/showcase/androidtwin_g1/hybrid_tracking.gif)
 
 16-frame loop @ 10 fps, 320×240 (downsampled from 31-frame mp4 at
 640×480). Top of frame turns black mid-rollout because the head

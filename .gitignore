@@ -37,6 +37,12 @@ ENV/
 .coverage
 htmlcov/
 *.cover
+.context/
+
+# Build artifacts
+*.egg-info/
+build/
+dist/
 
 # Jupyter
 .ipynb_checkpoints/
@@ -56,10 +62,13 @@ wandb/
 
 # MuJoCo
 *.xml.bak
-external/
 
-# Test and demo outputs (not tracked, 169+ images)
+# External libraries (use data/external/ instead)
+/external/
+
+# Test and demo outputs
 outputs/
+models/sr/
 
 # Downloaded pretrained models
 data/pretrained/

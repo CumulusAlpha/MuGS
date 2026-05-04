@@ -54,7 +54,7 @@ mugs/
 │   └── external/             # 外部下载资产
 │
 ├── tests/                    # 测试用例
-├── showcase/                 # 展示材料
+├── docs/images/showcase/     # 展示材料 (moved)
 ├── README.md                 # 项目主页
 └── TODO.md                   # 开发计划
 ```
