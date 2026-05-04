@@ -6,7 +6,8 @@ Implements hybrid rendering with:
 - MuJoCo foreground (physics-simulated objects/robots)
 - Segmentation-based compositing
 
-Supports both standalone usage and mjlab integration.
+Standalone sensor for use without mjlab.
+For mjlab integration, use mugs_mjlab.sensors.GaussianSensorMjlab instead.
 
 Author: MuGS Team
 Date: 2026-05-02
@@ -20,7 +21,7 @@ import torch
 from plyfile import PlyData
 import mujoco
 
-from .base import SensorBase, is_mjlab_available
+from .base import SensorBase
 
 try:
     from gsplat import rasterization
@@ -72,11 +73,7 @@ class GaussianSensorConfig:
 
 class GaussianSensor(SensorBase):
     """
-    Sensor for hybrid 3DGS + MuJoCo rendering.
-
-    Inherits from SensorBase for mjlab compatibility. Works in two modes:
-    - Standalone: when mjlab is not installed
-    - mjlab-integrated: when mjlab is available (auto-detected)
+    Standalone sensor for hybrid 3DGS + MuJoCo rendering.
 
     Usage:
         config = GaussianSensorConfig(
@@ -89,17 +86,11 @@ class GaussianSensor(SensorBase):
         # In simulation loop:
         rgb = sensor.render(model, data, camera_name="main_camera")
 
-    mjlab usage:
-        # Same config, but environment will handle batching
-        from mjlab import Environment
-        env = Environment(model_path, sensors=[sensor])
-        obs = env.reset()  # sensor.render() called internally
+    For mjlab integration, use mugs_mjlab.sensors.GaussianSensorMjlab instead.
     """
 
     def __init__(self, config: GaussianSensorConfig):
-        # Initialize base class if mjlab is available
-        if is_mjlab_available():
-            super().__init__()
+        super().__init__()
 
         if not GSPLAT_AVAILABLE:
             raise ImportError("gsplat is required for GaussianSensor")
@@ -448,7 +439,7 @@ class GaussianSensor(SensorBase):
         return self.cfg.height
 
     def get_observation_space(self) -> Dict:
-        """Get observation space specification (mjlab compatibility)."""
+        """Get observation space specification."""
         return {
             'shape': (self.cfg.height, self.cfg.width, 3),
             'dtype': np.uint8,
@@ -488,7 +479,6 @@ class GaussianSensor(SensorBase):
             },
             'background_loaded': self.background_gaussians is not None,
             'cache_active': self._cached_background is not None,
-            'mjlab_mode': is_mjlab_available(),
         }
 
         if self.background_gaussians is not None:
@@ -497,5 +487,5 @@ class GaussianSensor(SensorBase):
         return stats
 
     def get_info(self) -> Dict:
-        """Get sensor info (mjlab compatibility alias for get_stats)."""
+        """Get sensor info (alias for get_stats)."""
         return self.get_stats()

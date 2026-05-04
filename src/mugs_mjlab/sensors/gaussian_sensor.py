@@ -1,11 +1,13 @@
 """
-GaussianSensor for mjlab: Batch-first photorealistic rendering
+GaussianSensorMjlab: Batch-first photorealistic rendering for mjlab
 
-Implements true mjlab.sensor.Sensor interface with:
+Implements mjlab.sensor.Sensor interface with:
 - Batch rendering: (num_envs, H, W, 3) torch tensors
 - 3DGS background + MuJoCo foreground hybrid rendering
 - SensorContext integration for efficient GPU rendering
 - Two-phase initialization: edit_spec() → initialize()
+
+This module requires mjlab to be installed.
 
 Author: MuGS Team
 Date: 2026-05-02
@@ -27,28 +29,18 @@ try:
     GSPLAT_AVAILABLE = True
 except ImportError:
     GSPLAT_AVAILABLE = False
+    raise ImportError(
+        "gsplat is required for mugs_mjlab. Install with: pip install gsplat"
+    )
 
 try:
     from mjlab.sensor import Sensor, SensorCfg
     import mujoco_warp as mjwarp
-    MJLAB_AVAILABLE = True
-except ImportError:
-    MJLAB_AVAILABLE = False
-    # Fallback definitions for development
-    from abc import ABC
-    from typing import Generic, TypeVar
-
-    T = TypeVar("T")
-
-    @dataclass
-    class SensorCfg(ABC):
-        name: str
-        def build(self): raise NotImplementedError
-
-    class Sensor(ABC, Generic[T]):
-        def __init__(self):
-            self._cached_data = None
-            self._cache_valid = False
+except ImportError as e:
+    raise ImportError(
+        "mjlab is required for mugs_mjlab. "
+        "Install from: https://github.com/YOUR_ORG/mjlab"
+    ) from e
 
 if TYPE_CHECKING:
     from mjlab.sensor.sensor_context import SensorContext
