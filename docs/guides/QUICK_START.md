@@ -471,6 +471,7 @@ After completing this quick start:
 - **Technical Design**: `docs/design/TECHNICAL_DESIGN.md` - Complete implementation guide
 - **Research Ideas**: `docs/RESEARCH_IDEAS.md` - Research questions & experiments
 - **Asset Guide**: `docs/guides/ASSET_ACQUISITION.md` - How to obtain assets
+- **Capture your own scene**: `docs/guides/GS_DATA_COLLECTION.md` - 自采 → COLMAP → 3DGS → MuGS 端到端教程
 - **Project Overview**: `PROJECT_OVERVIEW.md` - Comprehensive reference
 
 ### External Resources

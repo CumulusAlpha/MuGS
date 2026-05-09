@@ -214,20 +214,15 @@ cp output/kitchen/point_cloud/iteration_30000/point_cloud.ply \
 
 ### 方案3: 自己捕获（最灵活）
 
-**使用手机/相机拍摄**:
+完整的端到端教程见 **[GS_DATA_COLLECTION.md](GS_DATA_COLLECTION.md)** —— 拍摄技巧、COLMAP、3DGS 训练、落地到 MuGS 都在那里展开。简版命令：
 
 ```bash
-# 1. 拍摄50-100张照片（围绕场景）
-# 2. 使用COLMAP提取camera poses
-colmap automatic_reconstructor \
-    --workspace_path workspace \
-    --image_path images
-
-# 3. 转换为3DGS格式
-python convert.py -s workspace
-
-# 4. 训练3DGS
-python train.py -s workspace -m output/my_kitchen
+# 1. 拍摄 100–300 张照片（三圈环绕，锁定 AE/AF/WB）
+# 2. COLMAP + 3DGS 一条龙
+git clone https://github.com/graphdeco-inria/gaussian-splatting
+cd gaussian-splatting
+python convert.py -s data/custom/<scene>           # COLMAP SfM
+python train.py   -s data/custom/<scene> -m out/<scene> --iterations 30000
 ```
 
 **优点**:

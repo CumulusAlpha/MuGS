@@ -2,6 +2,8 @@
 
 This guide covers how to obtain 3D Gaussian Splatting (3DGS) models and pre-trained super-resolution models for MuGS.
 
+> 想自己拍摄场景而不是下载？请直接看 **[GS_DATA_COLLECTION.md](GS_DATA_COLLECTION.md)** —— 拍摄 → COLMAP → 3DGS 训练 → 落地 MuGS 的完整教程。
+
 **Last Updated**: 2026-05-02
 
 ---
