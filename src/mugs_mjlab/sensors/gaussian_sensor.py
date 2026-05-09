@@ -26,25 +26,26 @@ from plyfile import PlyData
 
 try:
     from gsplat import rasterization
+
     GSPLAT_AVAILABLE = True
 except ImportError:
     GSPLAT_AVAILABLE = False
-    raise ImportError(
-        "gsplat is required for mugs_mjlab. Install with: pip install gsplat"
-    )
+    raise ImportError("gsplat is required for mugs_mjlab. Install with: pip install gsplat")
 
 try:
-    from mjlab.sensor import Sensor, SensorCfg
     import mujoco_warp as mjwarp
+    from mjlab.sensor import Sensor, SensorCfg
+
+    MJLAB_AVAILABLE = True
 except ImportError as e:
+    MJLAB_AVAILABLE = False
     raise ImportError(
-        "mjlab is required for mugs_mjlab. "
-        "Install from: https://github.com/YOUR_ORG/mjlab"
+        "mjlab is required for mugs_mjlab. " "Install from: https://github.com/YOUR_ORG/mjlab"
     ) from e
 
 if TYPE_CHECKING:
-    from mjlab.sensor.sensor_context import SensorContext
     from mjlab.entity import Entity
+    from mjlab.sensor.sensor_context import SensorContext
 
 
 RenderMode = Literal["hybrid", "3dgs_only", "mujoco_only"]
@@ -89,10 +90,17 @@ class GaussianSensorMjlabCfg(SensorCfg):
     """Rendering mode: hybrid (3DGS+MuJoCo), 3dgs_only, or mujoco_only."""
 
     # Robot masking (for hybrid mode)
-    robot_geom_names: list[str] = field(default_factory=lambda: [
-        'base_link', 'shoulder_link', 'arm_link', 'forearm_link',
-        'palm', 'left_finger_link', 'right_finger_link'
-    ])
+    robot_geom_names: list[str] = field(
+        default_factory=lambda: [
+            "base_link",
+            "shoulder_link",
+            "arm_link",
+            "forearm_link",
+            "palm",
+            "left_finger_link",
+            "right_finger_link",
+        ]
+    )
     """MuJoCo geom names to mask as foreground."""
 
     # Performance
@@ -279,8 +287,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         if self.cfg.background_ply_path is not None:
             print(f"  → Loading 3DGS background: {self.cfg.background_ply_path}")
             self._gaussians = self._load_official_ply(
-                self.cfg.background_ply_path,
-                torch.device(device)
+                self.cfg.background_ply_path, torch.device(device)
             )
             print(f"  ✓ Loaded {len(self._gaussians['means']):,} Gaussians")
 
@@ -288,9 +295,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         if self.cfg.render_mode in ["hybrid", "mujoco_only"]:
             self._robot_geom_ids = []
             for geom_name in self.cfg.robot_geom_names:
-                geom_id = mujoco.mj_name2id(
-                    mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_name
-                )
+                geom_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
                 if geom_id >= 0:
                     self._robot_geom_ids.append(geom_id)
 
@@ -374,7 +379,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
             return torch.zeros(
                 (self._num_envs, self.cfg.height, self.cfg.width, 3),
                 dtype=torch.uint8,
-                device=self._device
+                device=self._device,
             )
 
         # Get camera poses for all environments
@@ -418,21 +423,19 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         cy = self.cfg.height / 2
 
         K = torch.tensor(
-            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]],
-            dtype=torch.float32,
-            device=self._device
+            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32, device=self._device
         )
         Ks = K.unsqueeze(0).expand(self._num_envs, 3, 3)  # (N, 3, 3)
 
         # Single batched rasterization call
         render_colors, _, _ = rasterization(
-            means=self._gaussians['means'],
-            quats=self._gaussians['quats'],
-            scales=self._gaussians['scales'],
-            opacities=self._gaussians['opacities'],
-            colors=self._gaussians['colors'],
+            means=self._gaussians["means"],
+            quats=self._gaussians["quats"],
+            scales=self._gaussians["scales"],
+            opacities=self._gaussians["opacities"],
+            colors=self._gaussians["colors"],
             viewmats=view_matrices,  # (N, 4, 4) batch
-            Ks=Ks,                   # (N, 3, 3) batch
+            Ks=Ks,  # (N, 3, 3) batch
             width=self.cfg.width,
             height=self.cfg.height,
             packed=False,
@@ -470,10 +473,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         return rgb_batch, masks
 
     def _composite_batch(
-        self,
-        backgrounds: torch.Tensor,
-        foregrounds: torch.Tensor,
-        masks: torch.Tensor
+        self, backgrounds: torch.Tensor, foregrounds: torch.Tensor, masks: torch.Tensor
     ) -> torch.Tensor:
         """Composite foregrounds onto backgrounds using masks (batched).
 
@@ -521,7 +521,7 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         # Build 4×4 transformation matrices
         poses = torch.eye(4, device=self._device).unsqueeze(0).expand(self._num_envs, 4, 4).clone()
         poses[:, :3, :3] = rot_matrices  # Rotation
-        poses[:, :3, 3] = cam_pos         # Translation
+        poses[:, :3, 3] = cam_pos  # Translation
 
         return poses
 
@@ -543,46 +543,40 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
 
         return masks
 
-    def _load_official_ply(
-        self,
-        ply_path: Path,
-        device: torch.device
-    ) -> dict[str, torch.Tensor]:
+    def _load_official_ply(self, ply_path: Path, device: torch.device) -> dict[str, torch.Tensor]:
         """Load official 3DGS PLY format.
 
         Returns:
             Dictionary of Gaussian parameters as torch tensors on device
         """
         plydata = PlyData.read(ply_path)
-        vertex = plydata['vertex']
+        vertex = plydata["vertex"]
 
         # Positions
-        positions = np.stack([vertex['x'], vertex['y'], vertex['z']], axis=1)
+        positions = np.stack([vertex["x"], vertex["y"], vertex["z"]], axis=1)
 
         # SH DC → RGB
         SH_C0 = 0.28209479177387814
-        sh_dc = np.stack([vertex['f_dc_0'], vertex['f_dc_1'], vertex['f_dc_2']], axis=1)
+        sh_dc = np.stack([vertex["f_dc_0"], vertex["f_dc_1"], vertex["f_dc_2"]], axis=1)
         colors = 0.5 + SH_C0 * sh_dc
         colors = np.clip(colors, 0, 1)
 
         # Opacity (sigmoid)
-        opacities = 1 / (1 + np.exp(-vertex['opacity']))
+        opacities = 1 / (1 + np.exp(-vertex["opacity"]))
 
         # Scales (exp)
-        scales = np.exp(np.stack([
-            vertex['scale_0'], vertex['scale_1'], vertex['scale_2']
-        ], axis=1))
+        scales = np.exp(np.stack([vertex["scale_0"], vertex["scale_1"], vertex["scale_2"]], axis=1))
 
         # Quaternions (normalize)
-        quats = np.stack([
-            vertex['rot_0'], vertex['rot_1'], vertex['rot_2'], vertex['rot_3']
-        ], axis=1)
+        quats = np.stack(
+            [vertex["rot_0"], vertex["rot_1"], vertex["rot_2"], vertex["rot_3"]], axis=1
+        )
         quats = quats / np.linalg.norm(quats, axis=1, keepdims=True)
 
         return {
-            'means': torch.from_numpy(positions).float().to(device),
-            'colors': torch.from_numpy(colors).float().to(device),
-            'opacities': torch.from_numpy(opacities).float().to(device),
-            'scales': torch.from_numpy(scales).float().to(device),
-            'quats': torch.from_numpy(quats).float().to(device),
+            "means": torch.from_numpy(positions).float().to(device),
+            "colors": torch.from_numpy(colors).float().to(device),
+            "opacities": torch.from_numpy(opacities).float().to(device),
+            "scales": torch.from_numpy(scales).float().to(device),
+            "quats": torch.from_numpy(quats).float().to(device),
         }

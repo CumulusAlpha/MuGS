@@ -125,9 +125,19 @@ jobs:
         run: |
           python -c "from mugs.sensors import GaussianSensor; print('✅ GaussianSensor import OK')"
 
-      - name: Test batch sensor creation
+      - name: Test batch sensor creation (mjlab, optional)
         run: |
-          python -c "from mugs.sensors import GaussianSensorMjlabCfg; cfg = GaussianSensorMjlabCfg(name='test', width=320, height=240); print('✅ GaussianSensorMjlabCfg OK')"
+          # mugs_mjlab requires the mjlab package, which is not on PyPI.
+          # Skip cleanly when mjlab is unavailable in this CI env.
+          python - <<'PY'
+          import importlib.util
+          if importlib.util.find_spec("mjlab") is None:
+              print("⏭  mjlab not installed — skipping batch sensor smoke test")
+          else:
+              from mugs_mjlab.sensors import GaussianSensorMjlabCfg
+              cfg = GaussianSensorMjlabCfg(name="test", width=320, height=240)
+              print("✅ GaussianSensorMjlabCfg OK")
+          PY
 
       - name: Run minimal example (dry run)
         run: |

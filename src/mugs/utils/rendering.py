@@ -12,9 +12,10 @@ Date: 2026-05-02
 """
 
 from pathlib import Path
-from typing import Dict, Tuple, Optional
-import numpy as np
+from typing import Dict, Optional, Tuple
+
 import mujoco
+import numpy as np
 
 
 def load_ply_gaussians(ply_path: Path) -> Dict[str, np.ndarray]:
@@ -30,49 +31,50 @@ def load_ply_gaussians(ply_path: Path) -> Dict[str, np.ndarray]:
     from plyfile import PlyData
 
     plydata = PlyData.read(str(ply_path))
-    vertices = plydata['vertex']
+    vertices = plydata["vertex"]
 
     # Extract positions
-    means = np.stack([
-        vertices['x'],
-        vertices['y'],
-        vertices['z']
-    ], axis=-1).astype(np.float32)
+    means = np.stack([vertices["x"], vertices["y"], vertices["z"]], axis=-1).astype(np.float32)
 
     # Extract scales (log-space in PLY)
-    scales = np.stack([
-        vertices['scale_0'],
-        vertices['scale_1'],
-        vertices['scale_2']
-    ], axis=-1).astype(np.float32)
+    scales = np.stack(
+        [vertices["scale_0"], vertices["scale_1"], vertices["scale_2"]], axis=-1
+    ).astype(np.float32)
     scales = np.exp(scales)  # Convert from log-space
 
     # Extract quaternions (wxyz format in PLY)
-    quats = np.stack([
-        vertices['rot_0'],  # w
-        vertices['rot_1'],  # x
-        vertices['rot_2'],  # y
-        vertices['rot_3']   # z
-    ], axis=-1).astype(np.float32)
+    quats = np.stack(
+        [
+            vertices["rot_0"],  # w
+            vertices["rot_1"],  # x
+            vertices["rot_2"],  # y
+            vertices["rot_3"],  # z
+        ],
+        axis=-1,
+    ).astype(np.float32)
 
     # Normalize quaternions
     quats = quats / np.linalg.norm(quats, axis=-1, keepdims=True)
 
     # Extract opacities (sigmoid-space in PLY)
-    opacities = vertices['opacity'].astype(np.float32)
+    opacities = vertices["opacity"].astype(np.float32)
     opacities = 1.0 / (1.0 + np.exp(-opacities))  # Sigmoid
 
     # Extract spherical harmonics coefficients
-    sh_keys = [key for key in vertices.data.dtype.names if key.startswith('f_dc_') or key.startswith('f_rest_')]
+    sh_keys = [
+        key
+        for key in vertices.data.dtype.names
+        if key.startswith("f_dc_") or key.startswith("f_rest_")
+    ]
     sh_keys = sorted(sh_keys)
     sh_coeffs = np.stack([vertices[key] for key in sh_keys], axis=-1).astype(np.float32)
 
     return {
-        'means': means,
-        'scales': scales,
-        'quats': quats,
-        'opacities': opacities,
-        'sh_coeffs': sh_coeffs
+        "means": means,
+        "scales": scales,
+        "quats": quats,
+        "opacities": opacities,
+        "sh_coeffs": sh_coeffs,
     }
 
 
@@ -82,7 +84,7 @@ def render_mujoco_rgb(
     camera_name: str,
     width: int,
     height: int,
-    renderer: Optional[mujoco.Renderer] = None
+    renderer: Optional[mujoco.Renderer] = None,
 ) -> np.ndarray:
     """
     Render RGB image from MuJoCo.
@@ -113,7 +115,7 @@ def render_mujoco_segmentation(
     camera_name: str,
     width: int,
     height: int,
-    renderer: Optional[mujoco.Renderer] = None
+    renderer: Optional[mujoco.Renderer] = None,
 ) -> np.ndarray:
     """
     Render segmentation IDs from MuJoCo.
@@ -144,9 +146,7 @@ def render_mujoco_segmentation(
 
 
 def create_robot_mask(
-    seg_ids: np.ndarray,
-    model: mujoco.MjModel,
-    robot_geom_names: list
+    seg_ids: np.ndarray, model: mujoco.MjModel, robot_geom_names: list
 ) -> np.ndarray:
     """
     Extract robot mask from segmentation IDs.
@@ -161,11 +161,7 @@ def create_robot_mask(
     """
     robot_geom_ids = []
     for name in robot_geom_names:
-        geom_id = mujoco.mj_name2id(
-            model,
-            mujoco.mjtObj.mjOBJ_GEOM,
-            name
-        )
+        geom_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_GEOM, name)
         if geom_id >= 0:
             robot_geom_ids.append(geom_id)
 
@@ -178,9 +174,7 @@ def create_robot_mask(
 
 
 def composite_images(
-    mujoco_rgb: np.ndarray,
-    gs_rgb: np.ndarray,
-    robot_mask: np.ndarray
+    mujoco_rgb: np.ndarray, gs_rgb: np.ndarray, robot_mask: np.ndarray
 ) -> np.ndarray:
     """
     Composite MuJoCo and 3DGS images using robot mask.
@@ -200,11 +194,7 @@ def composite_images(
 
 
 def extract_mujoco_camera_params(
-    model: mujoco.MjModel,
-    data: mujoco.MjData,
-    camera_name: str,
-    width: int,
-    height: int
+    model: mujoco.MjModel, data: mujoco.MjData, camera_name: str, width: int, height: int
 ) -> Dict[str, np.ndarray]:
     """
     Extract camera parameters from MuJoCo for 3DGS rendering.
@@ -233,9 +223,4 @@ def extract_mujoco_camera_params(
     # Get FOV
     fov = model.cam_fovy[camera_id]
 
-    return {
-        'position': camera_pos,
-        'lookat': camera_lookat,
-        'up': camera_up,
-        'fov': fov
-    }
+    return {"position": camera_pos, "lookat": camera_lookat, "up": camera_up, "fov": fov}

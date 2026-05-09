@@ -5,9 +5,10 @@ Supports Real-ESRGAN models for photorealistic upscaling.
 """
 
 import sys
-from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, List, Union
+from pathlib import Path
+from typing import List, Optional, Union
+
 import numpy as np
 
 
@@ -81,8 +82,8 @@ class SuperResolution:
             return
 
         try:
-            from realesrgan import RealESRGANer
             from basicsr.archs.rrdbnet_arch import RRDBNet
+            from realesrgan import RealESRGANer
         except ImportError as e:
             raise ImportError(
                 "Real-ESRGAN not installed. Install with:\n"
@@ -116,16 +117,22 @@ class SuperResolution:
         if "anime" in self.config.model_name.lower():
             # Anime model uses different architecture
             model = RRDBNet(
-                num_in_ch=3, num_out_ch=3,
-                num_feat=64, num_block=6, num_grow_ch=32,
-                scale=self.config.scale
+                num_in_ch=3,
+                num_out_ch=3,
+                num_feat=64,
+                num_block=6,
+                num_grow_ch=32,
+                scale=self.config.scale,
             )
         else:
             # Standard Real-ESRGAN architecture
             model = RRDBNet(
-                num_in_ch=3, num_out_ch=3,
-                num_feat=64, num_block=23, num_grow_ch=32,
-                scale=self.config.scale
+                num_in_ch=3,
+                num_out_ch=3,
+                num_feat=64,
+                num_block=23,
+                num_grow_ch=32,
+                scale=self.config.scale,
             )
 
         # Create upsampler
@@ -176,8 +183,7 @@ class SuperResolution:
         # Upscale
         try:
             output, _ = self._upsampler.enhance(
-                img,
-                outscale=outscale if outscale is not None else self.config.scale
+                img, outscale=outscale if outscale is not None else self.config.scale
             )
             return output
         except Exception as e:
@@ -188,10 +194,7 @@ class SuperResolution:
             ) from e
 
     def batch_upscale(
-        self,
-        imgs: List[np.ndarray],
-        outscale: Optional[int] = None,
-        show_progress: bool = True
+        self, imgs: List[np.ndarray], outscale: Optional[int] = None, show_progress: bool = True
     ) -> List[np.ndarray]:
         """
         Upscale a batch of images.
@@ -213,6 +216,7 @@ class SuperResolution:
         if show_progress:
             try:
                 from tqdm import tqdm
+
                 iterator = tqdm(imgs, desc="Upscaling images")
             except ImportError:
                 print(f"Upscaling {len(imgs)} images...")
@@ -229,9 +233,9 @@ class SuperResolution:
     def available_models() -> List[str]:
         """List available pretrained models."""
         return [
-            "RealESRGAN_x4plus",        # Best quality, general purpose
-            "RealESRNet_x4plus",        # Faster, slightly lower quality
-            "RealESRGAN_x4plus_anime_6B"  # Optimized for anime/cartoon
+            "RealESRGAN_x4plus",  # Best quality, general purpose
+            "RealESRNet_x4plus",  # Faster, slightly lower quality
+            "RealESRGAN_x4plus_anime_6B",  # Optimized for anime/cartoon
         ]
 
     def __repr__(self) -> str:

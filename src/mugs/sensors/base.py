@@ -6,7 +6,8 @@ For mjlab integration, see the mugs_mjlab package.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any, Dict
+
 import numpy as np
 
 
@@ -35,10 +36,10 @@ class SensorBase(ABC):
             Dictionary with shape, dtype, and bounds
         """
         return {
-            'shape': (self.height, self.width, 3),
-            'dtype': np.uint8,
-            'low': 0,
-            'high': 255,
+            "shape": (self.height, self.width, 3),
+            "dtype": np.uint8,
+            "low": 0,
+            "high": 255,
         }
 
     @property
@@ -56,6 +57,6 @@ class SensorBase(ABC):
     def get_info(self) -> Dict[str, Any]:
         """Get sensor metadata and statistics."""
         return {
-            'type': self.__class__.__name__,
-            'resolution': (self.width, self.height),
+            "type": self.__class__.__name__,
+            "resolution": (self.width, self.height),
         }

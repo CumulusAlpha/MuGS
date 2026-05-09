@@ -5,7 +5,12 @@ Tests the full sensor creation pipeline without actual rendering.
 """
 
 import pytest
-import mujoco
+
+# Sensor creation goes through `mugs_mjlab.sensors.gaussian_sensor`,
+# which imports `mjlab`. Skip the whole module when mjlab is unavailable.
+pytest.importorskip("mjlab")
+
+import mujoco  # noqa: E402
 
 
 class TestSensorCreation:
@@ -29,7 +34,7 @@ class TestSensorCreation:
 
     def test_sensor_edit_spec(self, simple_scene_xml):
         """Test sensor can edit MuJoCo spec."""
-        from mugs.sensors.gaussian_sensor_mjlab import GaussianSensorMjlabCfg
+        from mugs_mjlab.sensors.gaussian_sensor import GaussianSensorMjlabCfg
 
         # Create sensor config
         cfg = GaussianSensorMjlabCfg(
@@ -44,8 +49,7 @@ class TestSensorCreation:
         sensor = cfg.build()
 
         # Create spec
-        spec = mujoco.MjSpec()
-        spec.from_string(simple_scene_xml)
+        spec = mujoco.MjSpec.from_string(simple_scene_xml)
 
         # Sensor edits spec
         sensor.edit_spec(spec, {})
@@ -57,7 +61,7 @@ class TestSensorCreation:
 
     def test_sensor_wraps_existing_camera(self, simple_scene_xml):
         """Test sensor can wrap existing camera."""
-        from mugs.sensors.gaussian_sensor_mjlab import GaussianSensorMjlabCfg
+        from mugs_mjlab.sensors.gaussian_sensor import GaussianSensorMjlabCfg
 
         # Scene with existing camera
         scene_with_cam = """
@@ -82,8 +86,7 @@ class TestSensorCreation:
         assert sensor._camera_name == "existing_cam"
 
         # Create spec
-        spec = mujoco.MjSpec()
-        spec.from_string(scene_with_cam)
+        spec = mujoco.MjSpec.from_string(scene_with_cam)
 
         # Sensor should not add new camera
         initial_ncam = len([c for c in spec.cameras])
@@ -95,7 +98,7 @@ class TestSensorCreation:
 
     def test_sensor_compile_model(self, simple_scene_xml):
         """Test full scene compilation with sensor."""
-        from mugs.sensors.gaussian_sensor_mjlab import GaussianSensorMjlabCfg
+        from mugs_mjlab.sensors.gaussian_sensor import GaussianSensorMjlabCfg
 
         cfg = GaussianSensorMjlabCfg(
             name="test_camera",
@@ -108,8 +111,7 @@ class TestSensorCreation:
         sensor = cfg.build()
 
         # Create and edit spec
-        spec = mujoco.MjSpec()
-        spec.from_string(simple_scene_xml)
+        spec = mujoco.MjSpec.from_string(simple_scene_xml)
         sensor.edit_spec(spec, {})
 
         # Compile model
@@ -124,7 +126,7 @@ class TestSensorCreation:
 
     def test_multiple_sensors(self, simple_scene_xml):
         """Test multiple sensors in same scene."""
-        from mugs.sensors.gaussian_sensor_mjlab import GaussianSensorMjlabCfg
+        from mugs_mjlab.sensors.gaussian_sensor import GaussianSensorMjlabCfg
 
         # Create two sensors
         cfg1 = GaussianSensorMjlabCfg(
@@ -145,8 +147,7 @@ class TestSensorCreation:
         sensor2 = cfg2.build()
 
         # Create spec
-        spec = mujoco.MjSpec()
-        spec.from_string(simple_scene_xml)
+        spec = mujoco.MjSpec.from_string(simple_scene_xml)
 
         # Both sensors edit spec
         sensor1.edit_spec(spec, {})
@@ -169,7 +170,7 @@ class TestSensorRobotGeoms:
 
     def test_robot_geom_ids_extraction(self):
         """Test extracting robot geom IDs."""
-        from mugs.sensors.gaussian_sensor_mjlab import GaussianSensorMjlabCfg
+        from mugs_mjlab.sensors.gaussian_sensor import GaussianSensorMjlabCfg
 
         scene = """
         <mujoco model="robot">
@@ -195,8 +196,7 @@ class TestSensorRobotGeoms:
         sensor = cfg.build()
 
         # Create model
-        spec = mujoco.MjSpec()
-        spec.from_string(scene)
+        spec = mujoco.MjSpec.from_string(scene)
         sensor.edit_spec(spec, {})
         model = spec.compile()
 

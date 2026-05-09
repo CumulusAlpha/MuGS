@@ -15,16 +15,18 @@ Date: 2026-05-02
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Dict, Union
+from typing import Dict, List, Optional, Union
+
+import mujoco
 import numpy as np
 import torch
 from plyfile import PlyData
-import mujoco
 
 from .base import SensorBase
 
 try:
     from gsplat import rasterization
+
     GSPLAT_AVAILABLE = True
 except ImportError:
     GSPLAT_AVAILABLE = False
@@ -52,10 +54,17 @@ class GaussianSensorConfig:
     """'hybrid', '3dgs_only', or 'mujoco_only'"""
 
     # Robot masking
-    robot_geom_names: List[str] = field(default_factory=lambda: [
-        'base_link', 'shoulder_link', 'arm_link', 'forearm_link',
-        'palm', 'left_finger_link', 'right_finger_link'
-    ])
+    robot_geom_names: List[str] = field(
+        default_factory=lambda: [
+            "base_link",
+            "shoulder_link",
+            "arm_link",
+            "forearm_link",
+            "palm",
+            "left_finger_link",
+            "right_finger_link",
+        ]
+    )
     """MuJoCo geom names to extract as robot mask"""
 
     robot_geom_ids: Optional[List[int]] = None
@@ -122,7 +131,7 @@ class GaussianSensor(SensorBase):
         data: mujoco.MjData,
         camera_name: str,
         return_components: bool = False,
-        camera_params: Optional[Dict] = None
+        camera_params: Optional[Dict] = None,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """
         Render hybrid RGB image.
@@ -153,7 +162,7 @@ class GaussianSensor(SensorBase):
         data: mujoco.MjData,
         camera_name: str,
         return_components: bool,
-        camera_params: Optional[Dict] = None
+        camera_params: Optional[Dict] = None,
     ) -> Union[np.ndarray, Dict[str, np.ndarray]]:
         """Hybrid rendering: 3DGS background + MuJoCo foreground."""
 
@@ -189,10 +198,10 @@ class GaussianSensor(SensorBase):
 
         if return_components:
             return {
-                'rgb': composite_rgb,
-                'background': background_rgb,
-                'foreground': foreground_rgb,
-                'mask': robot_mask
+                "rgb": composite_rgb,
+                "background": background_rgb,
+                "foreground": foreground_rgb,
+                "mask": robot_mask,
             }
         else:
             return composite_rgb
@@ -202,7 +211,7 @@ class GaussianSensor(SensorBase):
         model: mujoco.MjModel,
         data: mujoco.MjData,
         camera_name: str,
-        camera_params: Optional[Dict] = None
+        camera_params: Optional[Dict] = None,
     ) -> np.ndarray:
         """Render only 3DGS background."""
         if camera_params is None:
@@ -212,10 +221,7 @@ class GaussianSensor(SensorBase):
         return self._render_3dgs_background(camera_params)
 
     def _render_mujoco_only(
-        self,
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-        camera_name: str
+        self, model: mujoco.MjModel, data: mujoco.MjData, camera_name: str
     ) -> np.ndarray:
         """Render only MuJoCo (no 3DGS)."""
         foreground_rgb, _ = self._render_mujoco_foreground(model, data, camera_name)
@@ -228,41 +234,40 @@ class GaussianSensor(SensorBase):
     def _load_official_ply(self, ply_path: Path) -> Dict[str, torch.Tensor]:
         """Load official 3DGS PLY format with SH coefficients."""
         plydata = PlyData.read(ply_path)
-        vertex = plydata['vertex']
+        vertex = plydata["vertex"]
 
         # Positions
-        positions = np.stack([vertex['x'], vertex['y'], vertex['z']], axis=1)
+        positions = np.stack([vertex["x"], vertex["y"], vertex["z"]], axis=1)
 
         # SH DC → RGB
         SH_C0 = 0.28209479177387814
-        sh_dc = np.stack([vertex['f_dc_0'], vertex['f_dc_1'], vertex['f_dc_2']], axis=1)
+        sh_dc = np.stack([vertex["f_dc_0"], vertex["f_dc_1"], vertex["f_dc_2"]], axis=1)
         colors = 0.5 + SH_C0 * sh_dc
         colors = np.clip(colors, 0, 1)
 
         # Opacity (sigmoid)
-        opacities = 1 / (1 + np.exp(-vertex['opacity']))
+        opacities = 1 / (1 + np.exp(-vertex["opacity"]))
 
         # Scales (exp)
-        scales = np.exp(np.stack([vertex['scale_0'], vertex['scale_1'], vertex['scale_2']], axis=1))
+        scales = np.exp(np.stack([vertex["scale_0"], vertex["scale_1"], vertex["scale_2"]], axis=1))
 
         # Quaternions (normalize)
-        quats = np.stack([vertex['rot_0'], vertex['rot_1'], vertex['rot_2'], vertex['rot_3']], axis=1)
+        quats = np.stack(
+            [vertex["rot_0"], vertex["rot_1"], vertex["rot_2"], vertex["rot_3"]], axis=1
+        )
         quats = quats / np.linalg.norm(quats, axis=1, keepdims=True)
 
         # Convert to torch tensors on device
         return {
-            'means': torch.from_numpy(positions).float().to(self.device),
-            'colors': torch.from_numpy(colors).float().to(self.device),
-            'opacities': torch.from_numpy(opacities).float().to(self.device),
-            'scales': torch.from_numpy(scales).float().to(self.device),
-            'quats': torch.from_numpy(quats).float().to(self.device),
+            "means": torch.from_numpy(positions).float().to(self.device),
+            "colors": torch.from_numpy(colors).float().to(self.device),
+            "opacities": torch.from_numpy(opacities).float().to(self.device),
+            "scales": torch.from_numpy(scales).float().to(self.device),
+            "quats": torch.from_numpy(quats).float().to(self.device),
         }
 
     def _extract_camera_params(
-        self,
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-        camera_name: str
+        self, model: mujoco.MjModel, data: mujoco.MjData, camera_name: str
     ) -> Dict:
         """Extract camera parameters from MuJoCo."""
         camera_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_CAMERA, camera_name)
@@ -280,12 +285,12 @@ class GaussianSensor(SensorBase):
         cy = self.cfg.height / 2
 
         return {
-            'position': camera_pos,
-            'rotation_matrix': camera_mat,
-            'fx': fx,
-            'fy': fy,
-            'cx': cx,
-            'cy': cy,
+            "position": camera_pos,
+            "rotation_matrix": camera_mat,
+            "fx": fx,
+            "fy": fy,
+            "cx": cx,
+            "cy": cy,
         }
 
     def _normalize_camera_params(self, external_params: Dict) -> Dict:
@@ -305,19 +310,19 @@ class GaussianSensor(SensorBase):
             cx, cy: principal point
         """
         # Scale focal lengths to target resolution
-        orig_width = external_params.get('width', self.cfg.width)
-        orig_height = external_params.get('height', self.cfg.height)
+        orig_width = external_params.get("width", self.cfg.width)
+        orig_height = external_params.get("height", self.cfg.height)
 
-        fx = external_params['fx'] * (self.cfg.width / orig_width)
-        fy = external_params['fy'] * (self.cfg.height / orig_height)
+        fx = external_params["fx"] * (self.cfg.width / orig_width)
+        fy = external_params["fy"] * (self.cfg.height / orig_height)
 
         return {
-            'position': np.array(external_params['position'], dtype=np.float32),
-            'rotation_matrix': np.array(external_params['rotation'], dtype=np.float32),
-            'fx': fx,
-            'fy': fy,
-            'cx': self.cfg.width / 2,
-            'cy': self.cfg.height / 2,
+            "position": np.array(external_params["position"], dtype=np.float32),
+            "rotation_matrix": np.array(external_params["rotation"], dtype=np.float32),
+            "fx": fx,
+            "fy": fy,
+            "cx": self.cfg.width / 2,
+            "cy": self.cfg.height / 2,
         }
 
     def _render_3dgs_background(self, camera_params: Dict) -> np.ndarray:
@@ -328,11 +333,11 @@ class GaussianSensor(SensorBase):
 
         # Build view matrix (world → camera)
         # MuJoCo uses +Z forward, OpenGL/3DGS uses -Z forward
-        R_cam = camera_params['rotation_matrix'].copy()
+        R_cam = camera_params["rotation_matrix"].copy()
         R_cam[:, 2] = -R_cam[:, 2]  # Flip Z axis
 
         R = R_cam.T  # Transpose for world→camera
-        t = -R @ camera_params['position']
+        t = -R @ camera_params["position"]
         view_matrix = np.eye(4, dtype=np.float32)
         view_matrix[:3, :3] = R
         view_matrix[:3, 3] = t
@@ -340,17 +345,19 @@ class GaussianSensor(SensorBase):
         viewmat = torch.from_numpy(view_matrix).to(self.device)
 
         # Camera intrinsics
-        fx, fy = float(camera_params['fx']), float(camera_params['fy'])
-        cx, cy = float(camera_params['cx']), float(camera_params['cy'])
-        K = torch.tensor([[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32, device=self.device)
+        fx, fy = float(camera_params["fx"]), float(camera_params["fy"])
+        cx, cy = float(camera_params["cx"]), float(camera_params["cy"])
+        K = torch.tensor(
+            [[fx, 0, cx], [0, fy, cy], [0, 0, 1]], dtype=torch.float32, device=self.device
+        )
 
         # Render with gsplat
         render_colors, _, _ = rasterization(
-            means=self.background_gaussians['means'],
-            quats=self.background_gaussians['quats'],
-            scales=self.background_gaussians['scales'],
-            opacities=self.background_gaussians['opacities'],
-            colors=self.background_gaussians['colors'],
+            means=self.background_gaussians["means"],
+            quats=self.background_gaussians["quats"],
+            scales=self.background_gaussians["scales"],
+            opacities=self.background_gaussians["opacities"],
+            colors=self.background_gaussians["colors"],
             viewmats=viewmat[None],
             Ks=K[None],
             width=self.cfg.width,
@@ -366,10 +373,7 @@ class GaussianSensor(SensorBase):
     # ─────────────────────────────────────────────────────────────
 
     def _render_mujoco_foreground(
-        self,
-        model: mujoco.MjModel,
-        data: mujoco.MjData,
-        camera_name: str
+        self, model: mujoco.MjModel, data: mujoco.MjData, camera_name: str
     ) -> tuple[np.ndarray, np.ndarray]:
         """Render MuJoCo with RGB and segmentation."""
         renderer = mujoco.Renderer(model, self.cfg.height, self.cfg.width)
@@ -391,11 +395,7 @@ class GaussianSensor(SensorBase):
 
         return rgb, seg_ids
 
-    def _create_robot_mask(
-        self,
-        seg_ids: np.ndarray,
-        model: mujoco.MjModel
-    ) -> np.ndarray:
+    def _create_robot_mask(self, seg_ids: np.ndarray, model: mujoco.MjModel) -> np.ndarray:
         """Create binary mask for robot geoms."""
         mask = np.zeros_like(seg_ids, dtype=np.uint8)
 
@@ -414,10 +414,7 @@ class GaussianSensor(SensorBase):
         return mask
 
     def _composite_images(
-        self,
-        background_rgb: np.ndarray,
-        foreground_rgb: np.ndarray,
-        mask: np.ndarray
+        self, background_rgb: np.ndarray, foreground_rgb: np.ndarray, mask: np.ndarray
     ) -> np.ndarray:
         """Alpha blend foreground onto background using mask."""
         mask_3ch = mask[:, :, None].astype(np.float32)
@@ -441,10 +438,10 @@ class GaussianSensor(SensorBase):
     def get_observation_space(self) -> Dict:
         """Get observation space specification."""
         return {
-            'shape': (self.cfg.height, self.cfg.width, 3),
-            'dtype': np.uint8,
-            'low': 0,
-            'high': 255,
+            "shape": (self.cfg.height, self.cfg.width, 3),
+            "dtype": np.uint8,
+            "low": 0,
+            "high": 255,
         }
 
     # ─────────────────────────────────────────────────────────────
@@ -457,10 +454,10 @@ class GaussianSensor(SensorBase):
             return False
 
         return (
-            np.allclose(cam1['position'], cam2['position'], atol=1e-6) and
-            np.allclose(cam1['rotation_matrix'], cam2['rotation_matrix'], atol=1e-6) and
-            abs(cam1['fx'] - cam2['fx']) < 1e-3 and
-            abs(cam1['fy'] - cam2['fy']) < 1e-3
+            np.allclose(cam1["position"], cam2["position"], atol=1e-6)
+            and np.allclose(cam1["rotation_matrix"], cam2["rotation_matrix"], atol=1e-6)
+            and abs(cam1["fx"] - cam2["fx"]) < 1e-3
+            and abs(cam1["fy"] - cam2["fy"]) < 1e-3
         )
 
     def clear_cache(self):
@@ -472,17 +469,17 @@ class GaussianSensor(SensorBase):
     def get_stats(self) -> Dict:
         """Get sensor statistics."""
         stats = {
-            'config': {
-                'resolution': (self.cfg.width, self.cfg.height),
-                'mode': self.cfg.render_mode,
-                'device': str(self.device),
+            "config": {
+                "resolution": (self.cfg.width, self.cfg.height),
+                "mode": self.cfg.render_mode,
+                "device": str(self.device),
             },
-            'background_loaded': self.background_gaussians is not None,
-            'cache_active': self._cached_background is not None,
+            "background_loaded": self.background_gaussians is not None,
+            "cache_active": self._cached_background is not None,
         }
 
         if self.background_gaussians is not None:
-            stats['n_gaussians'] = len(self.background_gaussians['means'])
+            stats["n_gaussians"] = len(self.background_gaussians["means"])
 
         return stats
 

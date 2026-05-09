@@ -8,7 +8,7 @@ from .base import SensorBase
 from .gaussian_sensor import GaussianSensor, GaussianSensorConfig
 
 __all__ = [
-    'SensorBase',
-    'GaussianSensor',
-    'GaussianSensorConfig',
+    "SensorBase",
+    "GaussianSensor",
+    "GaussianSensorConfig",
 ]
