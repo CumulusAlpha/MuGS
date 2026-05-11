@@ -424,17 +424,33 @@ See `docs/CAMERA_ALIGNMENT_FIX.md` for details.
 - **[`docs/SHOWCASE.md`](docs/SHOWCASE.md)** - 🎬 Creating demonstration materials
 
 ### Design & Status
-- **[`docs/design/DESIGN.md`](docs/design/DESIGN.md)** - 🏗️ System architecture (12k words)
+- **[`docs/design/PROJECT_ARCHITECTURE.md`](docs/design/PROJECT_ARCHITECTURE.md)** - 🏗️ System architecture
+- **[`docs/design/TECHNICAL_DESIGN.md`](docs/design/TECHNICAL_DESIGN.md)** - 🔧 Technical design notes
 - **[`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md)** - 📊 Current status
-- **[`TODO.md`](TODO.md)** - 📋 Development roadmap
+- **[`docs/development/TODO.md`](docs/development/TODO.md)** - 📋 Development roadmap
+
+## Installation
+
+```bash
+# 1. Clone and install MuGS (standalone GaussianSensor API).
+git clone https://github.com/Renforce-Dynamics/MuGS.git
+cd MuGS && pip install -e .
+
+# 2. (Optional) install the mjlab integration for batched multi-env rendering.
+pip install -e . -f pyproject_mugs_mjlab.toml   # needs mjlab + mujoco_warp
+```
+
+For RTX 4090 + CUDA 11.x build toolchains, set
+`TORCH_CUDA_ARCH_LIST="8.6+PTX"` so gsplat JIT-compiles to sm_89 via PTX.
+On headless servers, `MUJOCO_GL=egl` is required.
 
 ## Requirements
 
-- Python 3.8+
+- Python 3.10+
 - MuJoCo 3.0+
 - PyTorch 2.0+
-- gsplat
-- CUDA toolkit (for RTX 4090: use CUDA 12.0+, or set `TORCH_CUDA_ARCH_LIST="8.6"`)
+- gsplat 1.5+
+- (mjlab integration only) mjlab + mujoco_warp on CUDA 12.x runtime
 
 ## Citation
 
