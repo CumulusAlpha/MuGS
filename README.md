@@ -11,14 +11,14 @@ three world cams (front-diagonal, over-the-shoulder, low side hero).
 The composite below stitches all four panes — every panel is a hybrid
 MuGS render (3DGS bg + MuJoCo fg, alpha-blended per camera).
 
-[![4-cam DISCOVERSE lab3 composite](docs/media/discoverse_lab3/4cam_composite.mp4)](docs/media/discoverse_lab3/4cam_composite.mp4)
+![4-cam DISCOVERSE lab3 composite](docs/media/discoverse_lab3/4cam_composite.gif)
 
 | Camera | View |
 |---|---|
-| `robot/head_cam` (first-person, D435 mount, 47° down, 42° vfov) | [head_cam.mp4](docs/media/discoverse_lab3/head_cam.mp4) |
-| `world_cam` (front-diagonal) | [world_cam.mp4](docs/media/discoverse_lab3/world_cam.mp4) |
-| `world_back_cam` (over-the-shoulder back) | [world_back_cam.mp4](docs/media/discoverse_lab3/world_back_cam.mp4) |
-| `world_side_cam` (low hero shot) | [world_side_cam.mp4](docs/media/discoverse_lab3/world_side_cam.mp4) |
+| `robot/head_cam` (first-person, D435 mount, 47° down, 42° vfov) | ![head_cam](docs/media/discoverse_lab3/head_cam.gif) |
+| `world_cam` (front-diagonal) | ![world_cam](docs/media/discoverse_lab3/world_cam.gif) |
+| `world_back_cam` (over-the-shoulder back) | ![world_back_cam](docs/media/discoverse_lab3/world_back_cam.gif) |
+| `world_side_cam` (low hero shot) | ![world_side_cam](docs/media/discoverse_lab3/world_side_cam.gif) |
 
 Two pieces of plumbing make this work compared to the kitchen demo
 below:
