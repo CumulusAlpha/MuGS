@@ -95,6 +95,59 @@ uv run at-eval \
 (`MuGSRecorder`) lives at `androidtwin/envs/mugs_recorder.py` in the
 AndroidTwin repo and uses MuGS's standalone `GaussianSensor` API.
 
+### DISCOVERSE 3DGS rooms × AndroidTwin multi-cam rollout
+
+Four cameras, one rollout, one shared `world_T_gs` rigid alignment. The
+G1 + Inspire FTP stands via AMO inside the DISCOVERSE `lab3` 3DGS room;
+each frame is captured from the robot's first-person `head_cam` plus
+three world cams (front-diagonal, over-the-shoulder, low side hero).
+The composite below stitches all four panes — every panel is a hybrid
+MuGS render (3DGS bg + MuJoCo fg, alpha-blended per camera).
+
+[![4-cam DISCOVERSE lab3 composite](docs/media/discoverse_lab3/4cam_composite.mp4)](docs/media/discoverse_lab3/4cam_composite.mp4)
+
+| Camera | View |
+|---|---|
+| `robot/head_cam` (first-person, D435 mount, 47° down, 42° vfov) | [head_cam.mp4](docs/media/discoverse_lab3/head_cam.mp4) |
+| `world_cam` (front-diagonal) | [world_cam.mp4](docs/media/discoverse_lab3/world_cam.mp4) |
+| `world_back_cam` (over-the-shoulder back) | [world_back_cam.mp4](docs/media/discoverse_lab3/world_back_cam.mp4) |
+| `world_side_cam` (low hero shot) | [world_side_cam.mp4](docs/media/discoverse_lab3/world_side_cam.mp4) |
+
+Two pieces of plumbing make this work compared to the kitchen demo
+above:
+
+- **One alignment for all cams.** `MuGSRecorder` accepts a `world_T_gs`
+  4×4 transform that maps MJ-world → GS-world. Every simultaneous camera
+  applies the same transform to its live MJ pose, so the four views see
+  the same room from coherent perspectives without per-cam initial-pose
+  snapping.
+- **OpenGL → OpenCV Y-flip.** gsplat is OpenCV (+Y down). MuGS internally
+  negates column 2 of the cam rotation (Z forward), so the recorder
+  pre-negates column 1 in the `world_T_gs` branch. Without this, every
+  level-horizon world cam renders upside-down; the first-person head cam
+  survives unflipped only because its 47° pitch coincidentally lines up.
+
+Get the scene:
+
+```bash
+bash scripts/data_collection/download_discoverse_scenes.sh   # default: lab3
+```
+
+Render the demo (from the AndroidTwin repo, scene path adjusted):
+
+```bash
+.venv/bin/python examples/discoverse_room_rollout.py \
+  --bg-ply /path/to/MuGS/assets/scenes/discoverse_unpacked/lab3/point_cloud.ply \
+  --out-dir outputs/discoverse_lab3 \
+  --num-steps 120 --width 480 --height 360 \
+  --gs-fx 380 --gs-fy 380 --yaw-deg 180
+```
+
+See [`docs/discoverse_scenes.md`](docs/discoverse_scenes.md) for the
+scene catalog, alignment knobs (`yaw_deg`, GS focal, floor 5%-percentile,
+bbox-center vs median), and the training-cam convex-hull caveat that
+makes some camera placements render dim/noisy.
+
 ## Features
 
 ### Core Rendering
