@@ -217,9 +217,59 @@ See `docs/EXTERNAL_ASSETS.md` for detailed tutorial.
 
 ## Performance
 
-- **Resolution**: 640×480
-- **FPS**: ~5000 (hybrid mode)
-- **Background Loading**: ~2s (cached for subsequent renders)
+### Hardware
+
+| Component | Spec |
+|---|---|
+| GPU | NVIDIA GeForce RTX 4090 (24 GB, sm_89) |
+| Driver / CUDA runtime | 580.126.09 / CUDA 13.0 |
+| PyTorch | 2.11.0 + cu130 |
+| gsplat | 1.5.3 (JIT-compiled with `TORCH_CUDA_ARCH_LIST=8.6+PTX`) |
+| Build toolchain | CUDA 11.6 nvcc → driver-JIT to sm_89 |
+
+### Single-camera / single-env throughput
+
+| Stage | Latency | Notes |
+|---|---|---|
+| MuJoCo RGB | 0.21 ms | foreground render |
+| Segmentation | 1.33 ms | body-prefix mask |
+| Mask extract | 0.15 ms | `np.isin` |
+| **3DGS GPU** | **0.12 ms** | 6.18k gaussians @ 160×120 |
+| Composite | 0.13 ms | alpha-blend |
+| **Total** | **1.94 ms** | **515 Hz end-to-end** |
+
+### Parallel-env 3DGS rendering (RTX 4090, 160×120)
+
+Each environment gets an independent camera pose (sphere of look-at views).
+See `scripts/evaluation/benchmark_gsplat_parallel.py`.
+
+| Envs | 6k gaussians | 50k gaussians | 100k gaussians | 500k gaussians |
+|---:|---:|---:|---:|---:|
+| 1 | 10,479 | 10,421 | 10,479 | 9,625 |
+| 16 | 123,513 | 126,422 | 120,159 | 30,148 |
+| 64 | 489,251 | 249,321 | 137,871 | 24,685 |
+| 256 | **1,101,650** | 206,304 | 114,741 | 25,196 |
+| 1024 | 883,496 | 187,414 | 109,543 | OOM |
+| 2048 | 756,534 | 196,071 | 112,714 | OOM |
+| 4096 | 757,980 | 188,734 | **109,481** | OOM |
+
+(numbers = total env-FPS; per-env latency at 4096 envs is **1.32 µs** for kitchen-scale)
+
+### 4096 envs × resolution (6k gaussians)
+
+| Resolution | Latency | Env-FPS | Peak VRAM |
+|---|---:|---:|---:|
+| 80×60 | 2.60 ms | 1,575,441 | 21.0 GB |
+| 160×120 | 5.30 ms | 773,220 | 3.6 GB |
+| 224×224 | 11.01 ms | 372,049 | 7.4 GB |
+| 320×240 | 15.84 ms | 258,643 | 10.6 GB |
+
+### Takeaways
+
+- Single-env 3DGS clears the **5000 FPS** project target by ~2× at any realistic scene size.
+- Saturation point on a 4090: **batch ≈256 at 6k gaussians**, **batch ≈64 at 100k gaussians** (kernel becomes memory-bandwidth-bound thereafter).
+- 4096 parallel envs is feasible up to ~100k gaussians (22 GB peak); 500k gaussians OOMs past ~256 envs on 24 GB.
+- Background loading: ~2 s, cached for subsequent renders.
 
 ## Technical Details
 
