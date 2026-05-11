@@ -172,7 +172,7 @@ AndroidTwin repo and uses MuGS's standalone `GaussianSensor` API.
 ### Asset Support
 - **Pretrained Scenes**: INRIA kitchen (mip-NeRF 360 dataset)
 - **External Assets**: GS-Playground scenes, DISCOVERSE tasks (via download scripts)
-- **Custom Scenes**: Support for any 3DGS PLY files from COLMAP/Nerfstudio
+- **Custom Scenes**: Support for any 3DGS PLY files from COLMAP / Nerfstudio — shoot your own with [`docs/guides/GS_VIDEO_CAPTURE.md`](docs/guides/GS_VIDEO_CAPTURE.md) (phone-camera 三圈拍法, 中文实操向)
 
 ## Quick Start
 
@@ -422,6 +422,16 @@ See `docs/CAMERA_ALIGNMENT_FIX.md` for details.
 - **[`docs/CAMERA_ALIGNMENT_FIX.md`](docs/CAMERA_ALIGNMENT_FIX.md)** - 📐 Camera parameter handling
 - **[`docs/EXTERNAL_ASSETS.md`](docs/EXTERNAL_ASSETS.md)** - 📦 Using GS-Playground, DISCOVERSE assets
 - **[`docs/SHOWCASE.md`](docs/SHOWCASE.md)** - 🎬 Creating demonstration materials
+
+### Capturing your own 3DGS scenes
+- **[`docs/guides/INSTALLATION.md`](docs/guides/INSTALLATION.md)** - 🛠️ Install MuGS + 3DGS training stack
+- **[`docs/guides/QUICK_START.md`](docs/guides/QUICK_START.md)** - ⚡ End-to-end "first scene" walkthrough
+- **[`docs/guides/GS_VIDEO_CAPTURE.md`](docs/guides/GS_VIDEO_CAPTURE.md)** - 📱 Phone-camera shooting guide (中文, 实操向)
+- **[`docs/guides/GS_DATA_COLLECTION.md`](docs/guides/GS_DATA_COLLECTION.md)** - 🎞️ Full capture → COLMAP → 3DGS pipeline
+- **[`docs/guides/3DGS_ROOM_DATASETS.md`](docs/guides/3DGS_ROOM_DATASETS.md)** - 🏠 Public 3DGS room datasets to start from
+- **[`docs/guides/PRETRAINED_MODELS.md`](docs/guides/PRETRAINED_MODELS.md)** - 🧠 Pretrained scenes shipped with MuGS
+- **[`docs/guides/ASSET_ACQUISITION.md`](docs/guides/ASSET_ACQUISITION.md)** - 🗂️ Where to source robots / scenes / objects
+- **[`docs/guides/SEGMENT_ID_SYSTEM.md`](docs/guides/SEGMENT_ID_SYSTEM.md)** - 🎭 Segmentation ID conventions
 
 ### Design & Status
 - **[`docs/design/PROJECT_ARCHITECTURE.md`](docs/design/PROJECT_ARCHITECTURE.md)** - 🏗️ System architecture
