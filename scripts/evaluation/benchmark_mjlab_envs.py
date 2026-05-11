@@ -1,76 +1,86 @@
 #!/usr/bin/env python3
-"""End-to-end mjlab + MuGS GaussianSensor multi-env benchmark."""
+"""End-to-end mjlab + MuGS GaussianSensor multi-env benchmark.
+
+Thin CLI shim around `mugs_mjlab.tasks` so anyone can reproduce the
+README throughput tables (or sub in their own PLY) with a single command.
+"""
+
+from __future__ import annotations
+
+import argparse
 import os
+
 os.environ.setdefault("MUJOCO_GL", "egl")
-import sys
-import time
+
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent / "mugs/src"))
-
 import torch
-from mjlab.tasks.manipulation.config.yam import yam_lift_cube_env_cfg
-from mjlab.envs import ManagerBasedRlEnv
-from mugs_mjlab import GaussianSensorMjlabCfg
 
-REPO = Path("/home/ununtu/metabot-workspace/mugs")
-PLY = REPO / "data/pretrained/kitchen/point_cloud/iteration_30000/point_cloud.ply"
-assert PLY.exists(), f"ply missing: {PLY}"
+from mugs_mjlab.tasks import (
+    benchmark_env_cfg,
+    kitchen_ply_path,
+    make_yam_lift_cube_gs_env_cfg,
+    print_benchmark_table,
+)
 
-W, H = 160, 120
 
-def build(num_envs, render_mode="hybrid"):
-    cfg = yam_lift_cube_env_cfg(play=True)
-    cfg.scene.num_envs = num_envs
-    sensor_cfg = GaussianSensorMjlabCfg(
-        name="gs_rgb",
-        camera_name="robot/camera_d405",
-        width=W, height=H,
-        background_ply_path=str(PLY),
-        render_mode=render_mode,
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument(
+        "--ply",
+        type=Path,
+        default=None,
+        help="3DGS PLY background path (defaults to bundled kitchen scene).",
     )
-    # attach sensor (mjlab scene.sensors is a tuple of SensorCfg)
-    cfg.scene.sensors = cfg.scene.sensors + (sensor_cfg,)
-    env = ManagerBasedRlEnv(cfg=cfg, device="cuda")
-    return env
+    p.add_argument("--width", type=int, default=160)
+    p.add_argument("--height", type=int, default=120)
+    p.add_argument(
+        "--render-mode",
+        choices=("hybrid", "3dgs_only", "mujoco_only"),
+        default="hybrid",
+    )
+    p.add_argument(
+        "--env-counts",
+        type=int,
+        nargs="+",
+        default=[1, 4, 16, 64, 256, 1024, 4096],
+        help="Batch sizes to sweep.",
+    )
+    p.add_argument("--n-steps", type=int, default=30)
+    p.add_argument("--warmup", type=int, default=5)
+    return p.parse_args()
 
-def bench_one(num_envs, mode, n_steps=30, warmup=5):
-    torch.cuda.empty_cache()
-    env = build(num_envs, mode)
-    try:
-        obs, _ = env.reset()
-        action = torch.zeros(env.action_space.shape, device='cuda')
-        for _ in range(warmup):
-            env.step(action)
-        torch.cuda.synchronize()
-        t0 = time.time()
-        for _ in range(n_steps):
-            env.step(action)
-        torch.cuda.synchronize()
-        dt = (time.time() - t0) / n_steps
-        peak = torch.cuda.max_memory_allocated() / 1e9
-        torch.cuda.reset_peak_memory_stats()
-        try: env.close()
-        except: pass
-        return dt, num_envs/dt, peak
-    except (torch.cuda.OutOfMemoryError, RuntimeError) as e:
-        try: env.close()
-        except: pass
-        torch.cuda.empty_cache()
-        return None, None, str(e)[:200]
 
-print(f"Device: {torch.cuda.get_device_name(0)}")
-free_b, total_b = torch.cuda.mem_get_info()
-print(f"Free/Total VRAM: {free_b/1e9:.1f}/{total_b/1e9:.1f} GB\n")
+def main() -> None:
+    args = parse_args()
+    ply = args.ply or kitchen_ply_path()
+    assert ply.exists(), f"ply missing: {ply}"
 
-print("=" * 72)
-print(f"mjlab YAM-lift + GaussianSensorMjlab @ {W}×{H}, render_mode=hybrid")
-print("=" * 72)
-print(f"{'envs':>6} | {'step latency':>13} | {'env-FPS':>10} | {'peak VRAM':>10}")
-print("-" * 72)
-for B in [1, 4, 16, 64, 256, 1024, 4096]:
-    dt, fps, peak = bench_one(B, "hybrid")
-    if dt is None:
-        print(f"{B:>6} | ERR: {peak[:50]}")
-    else:
-        print(f"{B:>6} | {dt*1000:>10.2f} ms | {fps:>10,.0f} | {peak:>7.2f} GB")
+    print(f"Device: {torch.cuda.get_device_name(0)}")
+    free_b, total_b = torch.cuda.mem_get_info()
+    print(f"Free/Total VRAM: {free_b / 1e9:.1f}/{total_b / 1e9:.1f} GB\n")
+
+    def factory(num_envs: int):
+        return make_yam_lift_cube_gs_env_cfg(
+            ply_path=ply,
+            num_envs=num_envs,
+            width=args.width,
+            height=args.height,
+            render_mode=args.render_mode,
+        )
+
+    title = (
+        f"mjlab YAM-lift + GaussianSensorMjlab @ "
+        f"{args.width}×{args.height}, render_mode={args.render_mode}"
+    )
+    results = benchmark_env_cfg(
+        factory,
+        env_counts=tuple(args.env_counts),
+        n_steps=args.n_steps,
+        warmup=args.warmup,
+    )
+    print_benchmark_table(results, title=title)
+
+
+if __name__ == "__main__":
+    main()
