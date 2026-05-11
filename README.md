@@ -159,7 +159,7 @@ makes some camera placements render dim/noisy.
 
 ### Integration & Usability
 - **Easy Integration**: Drop-in `GaussianSensor` API for standalone use
-- **Batch Rendering**: mjlab integration for parallel multi-environment rendering
+- **Batch Rendering**: mjlab integration for parallel multi-environment rendering (`mugs_mjlab.tasks`: ready-to-use env configs + benchmark runner — 4096 envs in one batched warp + gsplat call)
 - **Automatic Masking**: Body-prefix or geom-name based foreground segmentation
 - **Camera Tracking**: Dynamic background camera follows MuJoCo camera motion
 
@@ -200,6 +200,51 @@ rgb = result['rgb']              # Final hybrid image (H, W, 3) uint8
 foreground = result['foreground'] # MuJoCo only
 background = result['background'] # 3DGS only
 mask = result['mask']            # Blending mask
+```
+
+### Batched parallel rendering (mjlab)
+
+Run **thousands of envs in parallel** with one batched mjwarp render + one
+gsplat rasterization call. `mugs_mjlab.tasks` ships a YAM lift-cube task
+config with a `GaussianSensorMjlab` pre-attached to the wrist camera, plus a
+generic benchmark runner that works for any `ManagerBasedRlEnvCfg` factory:
+
+```python
+from mjlab.envs import ManagerBasedRlEnv
+from mugs_mjlab import (
+    make_yam_lift_cube_gs_env_cfg,
+    kitchen_ply_path,
+    benchmark_env_cfg,
+    print_benchmark_table,
+)
+
+# 1. Build a 4096-env photorealistic YAM lift-cube env.
+cfg = make_yam_lift_cube_gs_env_cfg(
+    ply_path=kitchen_ply_path(),  # bundled INRIA kitchen scene
+    num_envs=4096,
+    width=160, height=120,
+    render_mode="hybrid",         # 3DGS bg + MuJoCo fg + alpha-blend
+)
+env = ManagerBasedRlEnv(cfg=cfg, device="cuda")
+obs, _ = env.reset()
+# obs['gs_rgb'].rgb.shape == (4096, 120, 160, 3)  uint8
+
+# 2. Sweep batch sizes and print a throughput table (RTX 4090: ~12.5k env-FPS @ 4096).
+results = benchmark_env_cfg(
+    lambda n: make_yam_lift_cube_gs_env_cfg(kitchen_ply_path(), num_envs=n),
+    env_counts=(1, 64, 1024, 4096),
+)
+print_benchmark_table(results)
+```
+
+`benchmark_env_cfg` accepts any `int -> ManagerBasedRlEnvCfg` factory, so the
+same runner works for your own mjlab task. CLI shim:
+
+```bash
+python scripts/evaluation/benchmark_mjlab_envs.py --env-counts 1 64 1024 4096
+# Override scene / resolution / mode:
+python scripts/evaluation/benchmark_mjlab_envs.py \
+    --ply /path/to/scene.ply --width 320 --height 240 --render-mode hybrid
 ```
 
 ### With Super-Resolution (Optional)
@@ -322,7 +367,11 @@ See `scripts/evaluation/benchmark_gsplat_parallel.py`.
 Full pipeline: mjlab `step()` (physics + observations + reward) **plus**
 `GaussianSensorMjlab` in hybrid mode (mjwarp foreground + 3DGS background +
 alpha-composite). `yam_lift_cube` manipulation task with a wrist-mounted
-camera. See `scripts/evaluation/benchmark_mjlab_envs.py`.
+camera. Reproduce in one command:
+
+```bash
+python scripts/evaluation/benchmark_mjlab_envs.py
+```
 
 | Envs | Step latency | Env-FPS | Peak VRAM |
 |---:|---:|---:|---:|
