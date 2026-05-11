@@ -34,7 +34,8 @@ except ImportError:
 
 try:
     import mujoco_warp as mjwarp
-    from mjlab.sensor import Sensor, SensorCfg
+    import warp as wp
+    from mjlab.sensor.camera_sensor import CameraSensor, CameraSensorCfg
 
     MJLAB_AVAILABLE = True
 except ImportError as e:
@@ -44,42 +45,19 @@ except ImportError as e:
     ) from e
 
 if TYPE_CHECKING:
-    from mjlab.entity import Entity
-    from mjlab.sensor.sensor_context import SensorContext
+    pass
 
 
 RenderMode = Literal["hybrid", "3dgs_only", "mujoco_only"]
 
 
 @dataclass
-class GaussianSensorMjlabCfg(SensorCfg):
+class GaussianSensorMjlabCfg(CameraSensorCfg):
     """Configuration for batch-first GaussianSensor.
 
-    Follows mjlab sensor config pattern with build() method.
+    Inherits CameraSensorCfg so mjlab wires it into the SensorContext and
+    mujoco_warp renders RGB+segmentation for all envs in one batched call.
     """
-
-    # Sensor identity
-    name: str = "gaussian_sensor"
-
-    # Resolution
-    width: int = 640
-    height: int = 480
-
-    # Camera setup
-    camera_name: str | None = None
-    """Existing camera to wrap. If None, creates new camera."""
-
-    parent_body: str | None = None
-    """Parent body for new camera. None = worldbody."""
-
-    pos: tuple[float, float, float] = (0.6, -0.8, 1.2)
-    """Camera position (world or parent-relative)."""
-
-    quat: tuple[float, float, float, float] = (1.0, 0.0, 0.0, 0.0)
-    """Camera orientation (w, x, y, z)."""
-
-    fov_degrees: float = 60.0
-    """Vertical field of view in degrees."""
 
     # 3DGS background
     background_ply_path: Path | None = None
@@ -111,8 +89,19 @@ class GaussianSensorMjlabCfg(SensorCfg):
     return_components: bool = False
     """If True, include background/foreground/mask in data."""
 
+    def __post_init__(self) -> None:
+        # Hybrid mode needs warp to render rgb+segmentation; pure modes need rgb.
+        required: tuple[str, ...]
+        if self.render_mode == "hybrid":
+            required = ("rgb", "segmentation")
+        else:
+            required = ("rgb",)
+        merged = tuple(dict.fromkeys((*self.data_types, *required)))
+        # Avoid mutating frozen-but-not-frozen dataclass via direct assignment.
+        object.__setattr__(self, "data_types", merged)
+        super().__post_init__()
+
     def build(self) -> GaussianSensorMjlab:
-        """Build sensor instance from this config."""
         return GaussianSensorMjlab(self)
 
 
@@ -137,119 +126,37 @@ class GaussianSensorData:
     """Robot mask [num_envs, H, W, 1] (float32). None if not enabled."""
 
 
-class GaussianSensorMjlab(Sensor[GaussianSensorData]):
+class GaussianSensorMjlab(CameraSensor):
     """Batch-first GaussianSensor compatible with mjlab.
 
-    Implements true mjlab.sensor.Sensor interface:
-    - edit_spec(): Add camera to MuJoCo scene spec
-    - initialize(): Load 3DGS, cache indices, setup rendering
-    - _compute_data(): Batch render all environments
+    Inherits CameraSensor so mjlab's scene wires it into the SensorContext
+    and mujoco_warp renders rgb+segmentation for all envs in one batched
+    warp kernel (captured into the sense CUDA graph). MuGS layers a 3DGS
+    background underneath and alpha-composites the robot foreground on top.
 
-    Data format: (num_envs, height, width, channels) torch.Tensor
-
-    Usage:
-        cfg = GaussianSensorMjlabCfg(
-            name="gaussian",
-            width=640, height=480,
-            background_ply_path="kitchen.ply",
-            render_mode="hybrid",
-        )
-        sensor = cfg.build()
-
-        env = Environment(
-            model_path="scene.xml",
-            sensors=[sensor],
-            num_envs=4096,
-        )
-
-        obs = env.reset()
-        # obs['gaussian'].rgb.shape = (4096, 480, 640, 3)
+    Data format: (num_envs, height, width, channels) torch.Tensor.
     """
 
-    requires_sensor_context = True  # Need SensorContext for MuJoCo rendering
-
     def __init__(self, cfg: GaussianSensorMjlabCfg):
-        if not MJLAB_AVAILABLE:
-            raise ImportError(
-                "mjlab is required for GaussianSensorMjlab. "
-                "Use standalone GaussianSensor for non-mjlab usage."
-            )
-
         if not GSPLAT_AVAILABLE:
             raise ImportError("gsplat is required for GaussianSensor")
 
-        super().__init__()
-        self.cfg = cfg
+        super().__init__(cfg)
+        # Re-bind self.cfg with the concrete subclass type for attribute access.
+        self.cfg: GaussianSensorMjlabCfg = cfg
 
-        # Camera setup
-        self._camera_name = cfg.camera_name if cfg.camera_name else cfg.name
-        self._is_wrapping = cfg.camera_name is not None
-
-        # Batch state (initialized in initialize())
+        # Batch state (initialized in initialize()).
         self._num_envs: int = 0
         self._device: str = "cpu"
-        self._mj_model: mujoco.MjModel | None = None
-        self._mjwarp_model: mjwarp.Model | None = None
         self._mjwarp_data: mjwarp.Data | None = None
 
-        # 3DGS background
+        # 3DGS background.
         self._gaussians: dict[str, torch.Tensor] | None = None
         self._cached_background: torch.Tensor | None = None
         self._cached_camera_poses: torch.Tensor | None = None
 
-        # MuJoCo rendering (for hybrid/mujoco_only)
-        self._ctx: SensorContext | None = None
-        self._camera_idx: int = -1
+        # Robot mask cache (populated in initialize).
         self._robot_geom_ids: list[int] = []
-
-    @property
-    def camera_name(self) -> str:
-        """Camera name in MuJoCo model."""
-        return self._camera_name
-
-    @property
-    def camera_idx(self) -> int:
-        """Camera index in compiled model."""
-        return self._camera_idx
-
-    # ─────────────────────────────────────────────────────────────
-    # mjlab.Sensor Interface Implementation
-    # ─────────────────────────────────────────────────────────────
-
-    def edit_spec(
-        self,
-        scene_spec: mujoco.MjSpec,
-        entities: dict[str, Entity],
-    ) -> None:
-        """Edit scene spec to add camera (if creating new one).
-
-        Called during scene construction before compilation.
-        """
-        del entities  # Unused
-
-        if self._is_wrapping:
-            # Wrapping existing camera - just verify it exists
-            cam = scene_spec.camera(self._camera_name)
-            if cam is None:
-                raise ValueError(f"Camera '{self._camera_name}' not found in scene")
-            return
-
-        # Create new camera
-        if self.cfg.parent_body is not None:
-            parent = scene_spec.body(self.cfg.parent_body)
-        else:
-            parent = scene_spec.worldbody
-
-        # Convert FOV to radians
-        fovy_rad = np.deg2rad(self.cfg.fov_degrees)
-
-        parent.add_camera(
-            name=self.cfg.name,
-            pos=self.cfg.pos,
-            quat=self.cfg.quat,
-            fovy=fovy_rad,
-            resolution=[self.cfg.width, self.cfg.height],
-        )
 
     def initialize(
         self,
@@ -260,48 +167,41 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
     ) -> None:
         """Initialize sensor after model compilation.
 
-        - Load 3DGS background
-        - Cache camera index
-        - Cache robot geom IDs
-        - Setup rendering context
+        Calls CameraSensor.initialize() to cache the MuJoCo camera index,
+        then loads the 3DGS background and caches robot geom IDs for masking.
         """
-        self._mj_model = mj_model
-        self._mjwarp_model = model
+        super().initialize(mj_model, model, data, device)
+
         self._mjwarp_data = data
         self._device = device
+        self._num_envs = data.nworld
 
-        # Get batch size
-        self._num_envs = data.qpos.shape[0]
-        print(f"[GaussianSensorMjlab] Initializing for {self._num_envs} environments")
-
-        # Get camera index
-        self._camera_idx = mujoco.mj_name2id(
-            mj_model, mujoco.mjtObj.mjOBJ_CAMERA, self._camera_name
+        print(
+            f"[GaussianSensorMjlab] Initializing for {self._num_envs} envs"
+            f" — camera '{self._camera_name}' idx={self._camera_idx}"
         )
-        if self._camera_idx < 0:
-            raise ValueError(f"Camera '{self._camera_name}' not found after compilation")
 
-        print(f"  ✓ Camera '{self._camera_name}' idx={self._camera_idx}")
-
-        # Load 3DGS background
         if self.cfg.background_ply_path is not None:
             print(f"  → Loading 3DGS background: {self.cfg.background_ply_path}")
             self._gaussians = self._load_official_ply(
-                self.cfg.background_ply_path, torch.device(device)
+                Path(self.cfg.background_ply_path), torch.device(device)
             )
             print(f"  ✓ Loaded {len(self._gaussians['means']):,} Gaussians")
 
-        # Cache robot geom IDs (for masking)
-        if self.cfg.render_mode in ["hybrid", "mujoco_only"]:
+        if self.cfg.render_mode in ("hybrid", "mujoco_only"):
             self._robot_geom_ids = []
             for geom_name in self.cfg.robot_geom_names:
-                geom_id = mujoco.mj_name2id(mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_name)
+                geom_id = mujoco.mj_name2id(
+                    mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_name
+                )
                 if geom_id >= 0:
                     self._robot_geom_ids.append(geom_id)
+            print(
+                f"  ✓ Robot geoms: "
+                f"{len(self._robot_geom_ids)}/{len(self.cfg.robot_geom_names)}"
+            )
 
-            print(f"  ✓ Robot geoms: {len(self._robot_geom_ids)}/{len(self.cfg.robot_geom_names)}")
-
-        print(f"[GaussianSensorMjlab] Initialization complete")
+        print("[GaussianSensorMjlab] Initialization complete")
 
     def _compute_data(self) -> GaussianSensorData:
         """Compute batch sensor data for all environments.
@@ -415,9 +315,11 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         # Build batch view matrices (world → camera)
         view_matrices = torch.inverse(camera_poses)  # (N, 4, 4)
 
-        # Build batch camera intrinsics
-        fov_y_rad = np.deg2rad(self.cfg.fov_degrees)
-        fx = (self.cfg.width / 2) / np.tan(fov_y_rad / 2)
+        # Build batch camera intrinsics. CameraSensorCfg.fovy is in degrees;
+        # None means the MuJoCo default of 45°.
+        fov_y_deg = self.cfg.fovy if self.cfg.fovy is not None else 45.0
+        fov_y_rad = np.deg2rad(fov_y_deg)
+        fx = (self.cfg.height / 2) / np.tan(fov_y_rad / 2)
         fy = (self.cfg.height / 2) / np.tan(fov_y_rad / 2)
         cx = self.cfg.width / 2
         cy = self.cfg.height / 2
@@ -446,30 +348,25 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
         return (rgb_batch * 255).to(torch.uint8)
 
     def _render_mujoco_batch(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Render MuJoCo foregrounds for all environments via SensorContext.
+        """Pull batched RGB + segmentation already rendered by mjwarp.
+
+        SensorContext writes per-camera rgb/segmentation into shared GPU
+        buffers via a single batched warp kernel captured in the sense
+        CUDA graph; here we just take views into them.
 
         Returns:
             foregrounds: (num_envs, H, W, 3) uint8
             masks: (num_envs, H, W, 1) float32
         """
-        # Get SensorContext from environment
-        # NOTE: This requires SensorContext to be set up by Environment
         if self._ctx is None:
             raise RuntimeError(
                 "SensorContext not available. "
-                "Make sure requires_sensor_context=True and context is injected."
+                "GaussianSensorMjlab must be attached to a mjlab Scene."
             )
 
-        # Render via context (automatically batched)
-        render_out = self._ctx.render(self._camera_idx)
-
-        # Extract RGB and segmentation
-        rgb_batch = render_out.rgb  # (N, H, W, 3) uint8
-        seg_batch = render_out.segmentation  # (N, H, W, 1) int32
-
-        # Create robot masks
-        masks = self._create_robot_masks_batch(seg_batch)  # (N, H, W, 1) float32
-
+        rgb_batch = self._ctx.get_rgb(self._camera_idx)
+        seg_batch = self._ctx.get_segmentation(self._camera_idx)
+        masks = self._create_robot_masks_batch(seg_batch)
         return rgb_batch, masks
 
     def _composite_batch(
@@ -504,25 +401,27 @@ class GaussianSensorMjlab(Sensor[GaussianSensorData]):
     def _get_camera_poses_batch(self) -> torch.Tensor:
         """Get camera-to-world transforms for all environments.
 
+        mjwarp stores per-env cam_xpos as (nworld, ncam, 3) and cam_xmat as
+        (nworld, ncam, 3, 3), as warp arrays — convert to torch (zero-copy)
+        before slicing.
+
         Returns:
-            Camera poses (num_envs, 4, 4) on device
+            Camera poses (num_envs, 4, 4) on device.
         """
-        # Extract camera transforms from mjwarp.Data
-        # cam_xpos: (num_envs, ncam, 3) - camera positions
-        # cam_xmat: (num_envs, ncam, 9) - camera rotation matrices (row-major)
+        assert self._mjwarp_data is not None
+        cam_pos_all = wp.to_torch(self._mjwarp_data.cam_xpos)  # (N, ncam, 3)
+        cam_mat_all = wp.to_torch(self._mjwarp_data.cam_xmat)  # (N, ncam, 3, 3)
+        cam_pos = cam_pos_all[:, self._camera_idx, :]  # (N, 3)
+        rot_matrices = cam_mat_all[:, self._camera_idx, :, :]  # (N, 3, 3)
 
-        cam_pos = self._mjwarp_data.cam_xpos[:, self._camera_idx, :]  # (N, 3)
-        cam_mat = self._mjwarp_data.cam_xmat[:, self._camera_idx, :]  # (N, 9)
-
-        # Reshape rotation matrix from flat (9,) to (3, 3)
-        # MuJoCo stores row-major: [r00, r01, r02, r10, r11, r12, r20, r21, r22]
-        rot_matrices = cam_mat.reshape(self._num_envs, 3, 3)  # (N, 3, 3)
-
-        # Build 4×4 transformation matrices
-        poses = torch.eye(4, device=self._device).unsqueeze(0).expand(self._num_envs, 4, 4).clone()
-        poses[:, :3, :3] = rot_matrices  # Rotation
-        poses[:, :3, 3] = cam_pos  # Translation
-
+        poses = (
+            torch.eye(4, device=self._device)
+            .unsqueeze(0)
+            .expand(self._num_envs, 4, 4)
+            .clone()
+        )
+        poses[:, :3, :3] = rot_matrices
+        poses[:, :3, 3] = cam_pos
         return poses
 
     def _create_robot_masks_batch(self, seg_batch: torch.Tensor) -> torch.Tensor:

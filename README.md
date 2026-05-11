@@ -317,11 +317,29 @@ See `scripts/evaluation/benchmark_gsplat_parallel.py`.
 | 224×224 | 11.01 ms | 372,049 | 7.4 GB |
 | 320×240 | 15.84 ms | 258,643 | 10.6 GB |
 
+### End-to-end mjlab + GaussianSensorMjlab (hybrid, 160×120, 6k gaussians)
+
+Full pipeline: mjlab `step()` (physics + observations + reward) **plus**
+`GaussianSensorMjlab` in hybrid mode (mjwarp foreground + 3DGS background +
+alpha-composite). `yam_lift_cube` manipulation task with a wrist-mounted
+camera. See `scripts/evaluation/benchmark_mjlab_envs.py`.
+
+| Envs | Step latency | Env-FPS | Peak VRAM |
+|---:|---:|---:|---:|
+| 1 | 4.34 ms | 231 | 0.10 GB |
+| 4 | 4.44 ms | 901 | 0.21 GB |
+| 16 | 5.66 ms | 2,825 | 0.21 GB |
+| 64 | 9.85 ms | 6,499 | 0.21 GB |
+| 256 | 25.97 ms | 9,859 | 0.21 GB |
+| 1024 | 84.18 ms | 12,164 | 0.31 GB |
+| 4096 | 326.32 ms | **12,552** | 0.32 GB |
+
 ### Takeaways
 
 - Single-env 3DGS clears the **5000 FPS** project target by ~2× at any realistic scene size.
 - Saturation point on a 4090: **batch ≈256 at 6k gaussians**, **batch ≈64 at 100k gaussians** (kernel becomes memory-bandwidth-bound thereafter).
 - 4096 parallel envs is feasible up to ~100k gaussians (22 GB peak); 500k gaussians OOMs past ~256 envs on 24 GB.
+- End-to-end mjlab + MuGS hybrid pipeline saturates at **~12.5k env-FPS** for 1024–4096 envs at 160×120 — bounded by mjlab's physics step + mjwarp segmentation render, not by 3DGS (which costs <0.4 ms per batch at this scale).
 - Background loading: ~2 s, cached for subsequent renders.
 
 ## Technical Details

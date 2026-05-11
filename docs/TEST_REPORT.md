@@ -194,18 +194,26 @@ python examples/test_batch_optimization.py
 | 合成 | <1ms | ✅ |
 | **总计** | **~17ms** | ✅ 58 FPS |
 
-### 预期性能 (批量)
+### 实测性能 (mjlab + GaussianSensorMjlab hybrid, 160×120, kitchen 6k gaussians)
 
-| 环境数 | 模式 | 预期时间/步 | 预期吞吐量 | 状态 |
-|--------|------|-------------|------------|------|
-| 16 | Batched | ~20ms | 50 FPS | ⏳ 待测 |
-| 4096 | Batched | ~22ms | 45 FPS | ⏳ 待测 |
-| 4096 | Cached | ~2ms | 500 FPS | ⏳ 待测 |
+RTX 4090 + `yam_lift_cube` 任务，包含完整 mjlab `step()` (physics + obs + reward)
+**外加** 混合渲染 (mjwarp foreground + 3DGS background + alpha-composite)。
+脚本：`scripts/evaluation/benchmark_mjlab_envs.py`。
 
-**性能目标**:
-- ✅ 单环境: >30 FPS (实际 58 FPS)
-- ⏳ 4096 环境动态相机: >20 FPS (预期 45 FPS)
-- ⏳ 4096 环境静态相机: >100 FPS (预期 500 FPS)
+| 环境数 | 单步延迟 | 环境 FPS | 峰值显存 | 状态 |
+|---:|---:|---:|---:|---|
+| 1 | 4.34 ms | 231 | 0.10 GB | ✅ |
+| 4 | 4.44 ms | 901 | 0.21 GB | ✅ |
+| 16 | 5.66 ms | 2,825 | 0.21 GB | ✅ |
+| 64 | 9.85 ms | 6,499 | 0.21 GB | ✅ |
+| 256 | 25.97 ms | 9,859 | 0.21 GB | ✅ |
+| 1024 | 84.18 ms | 12,164 | 0.31 GB | ✅ |
+| 4096 | 326.32 ms | **12,552** | 0.32 GB | ✅ |
+
+**结论**:
+- ✅ 单环境: 231 FPS (>30 FPS 目标)
+- ✅ 1024-4096 环境端到端饱和约 **12.5k env-FPS** —— 瓶颈是 mjlab 物理 + mjwarp 分割渲染，而非 3DGS（3DGS 本身在 4096 envs/6k gaussians 下仅 ~0.4 ms）。
+- ✅ 显存占用极低：4096 envs 端到端仅 0.32 GB，留出大量预算用于更大规模 3DGS 场景或更高分辨率。
 
 ---
 
