@@ -50,6 +50,8 @@ dist/
 # Data & Assets (large files)
 assets/objects/*.ply
 assets/scenes/*.ply
+assets/objects/**/*.ply
+assets/scenes/**/*.ply
 data/
 checkpoints/
 runs/
