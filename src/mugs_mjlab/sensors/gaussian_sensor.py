@@ -67,6 +67,12 @@ class GaussianSensorMjlabCfg(CameraSensorCfg):
     render_mode: RenderMode = "hybrid"
     """Rendering mode: hybrid (3DGS+MuJoCo), 3dgs_only, or mujoco_only."""
 
+    foreground_mode: Literal["named", "all"] = "named"
+    """Hybrid foreground mask mode: named geoms only, or all MuJoCo geoms."""
+
+    foreground_exclude_geom_names: tuple[str, ...] = ("terrain",)
+    """Geom names to keep out of the MuJoCo foreground mask in hybrid mode."""
+
     # Robot masking (for hybrid mode)
     robot_geom_names: list[str] = field(
         default_factory=lambda: [
@@ -157,6 +163,7 @@ class GaussianSensorMjlab(CameraSensor):
 
         # Robot mask cache (populated in initialize).
         self._robot_geom_ids: list[int] = []
+        self._foreground_exclude_geom_ids: list[int] = []
 
     def initialize(
         self,
@@ -200,6 +207,13 @@ class GaussianSensorMjlab(CameraSensor):
                 f"  ✓ Robot geoms: "
                 f"{len(self._robot_geom_ids)}/{len(self.cfg.robot_geom_names)}"
             )
+            self._foreground_exclude_geom_ids = []
+            for geom_name in self.cfg.foreground_exclude_geom_names:
+                geom_id = mujoco.mj_name2id(
+                    mj_model, mujoco.mjtObj.mjOBJ_GEOM, geom_name
+                )
+                if geom_id >= 0:
+                    self._foreground_exclude_geom_ids.append(geom_id)
 
         print("[GaussianSensorMjlab] Initialization complete")
 
@@ -253,13 +267,18 @@ class GaussianSensorMjlab(CameraSensor):
 
     def _compute_mujoco_only(self) -> GaussianSensorData:
         """MuJoCo only mode: Just render foregrounds."""
-        foregrounds, masks = self._render_mujoco_batch()
+        if self._ctx is None:
+            raise RuntimeError(
+                "SensorContext not available. "
+                "GaussianSensorMjlab must be attached to a mjlab Scene."
+            )
+
+        foregrounds = self._ctx.get_rgb(self._camera_idx)
 
         if self.cfg.return_components:
             return GaussianSensorData(
                 rgb=foregrounds,
                 foreground=foregrounds,
-                mask=masks,
             )
         else:
             return GaussianSensorData(rgb=foregrounds)
@@ -409,8 +428,8 @@ class GaussianSensorMjlab(CameraSensor):
             Camera poses (num_envs, 4, 4) on device.
         """
         assert self._mjwarp_data is not None
-        cam_pos_all = wp.to_torch(self._mjwarp_data.cam_xpos)  # (N, ncam, 3)
-        cam_mat_all = wp.to_torch(self._mjwarp_data.cam_xmat)  # (N, ncam, 3, 3)
+        cam_pos_all = self._as_torch(self._mjwarp_data.cam_xpos)  # (N, ncam, 3)
+        cam_mat_all = self._as_torch(self._mjwarp_data.cam_xmat)  # (N, ncam, 3, 3)
         cam_pos = cam_pos_all[:, self._camera_idx, :]  # (N, 3)
         rot_matrices = cam_mat_all[:, self._camera_idx, :, :]  # (N, 3, 3)
 
@@ -420,25 +439,50 @@ class GaussianSensorMjlab(CameraSensor):
             .expand(self._num_envs, 4, 4)
             .clone()
         )
-        poses[:, :3, :3] = rot_matrices
+        # MuJoCo camera frames look along -Z (OpenGL convention), while gsplat
+        # view matrices use +Z-forward camera coordinates. Rotate the camera
+        # frame by 180 degrees around X before converting camera-to-world to
+        # world-to-camera in _render_3dgs_batch_optimized().
+        opengl_to_opencv = torch.diag(
+            torch.tensor([1.0, -1.0, -1.0], device=self._device)
+        )
+        poses[:, :3, :3] = rot_matrices @ opengl_to_opencv
         poses[:, :3, 3] = cam_pos
         return poses
+
+    def _as_torch(self, value) -> torch.Tensor:
+        """Convert warp arrays to torch, while accepting newer torch-backed mjwarp fields."""
+        if isinstance(value, torch.Tensor):
+            return value.to(self._device)
+        try:
+            return wp.to_torch(value)
+        except AttributeError:
+            device = getattr(value, "device", None)
+            if isinstance(device, torch.device):
+                return torch.as_tensor(value, device=device).to(self._device)
+            return torch.as_tensor(value).to(self._device)
 
     def _create_robot_masks_batch(self, seg_batch: torch.Tensor) -> torch.Tensor:
         """Create robot masks from segmentation IDs (batched).
 
         Args:
-            seg_batch: (num_envs, H, W, 1) int32 geom IDs
+            seg_batch: (num_envs, H, W, 2) int32 object ID/type pairs
 
         Returns:
             masks: (num_envs, H, W, 1) float32 [0, 1]
         """
-        # Create mask tensor
-        masks = torch.zeros_like(seg_batch, dtype=torch.float32)
+        geom_ids = seg_batch[..., 0:1]
+        masks = torch.zeros_like(geom_ids, dtype=torch.float32)
+
+        if self.cfg.foreground_mode == "all":
+            masks[geom_ids >= 0] = 1.0
+            for geom_id in self._foreground_exclude_geom_ids:
+                masks[geom_ids == geom_id] = 0.0
+            return masks
 
         # Mark robot geoms
         for geom_id in self._robot_geom_ids:
-            masks[seg_batch == geom_id] = 1.0
+            masks[geom_ids == geom_id] = 1.0
 
         return masks
 
