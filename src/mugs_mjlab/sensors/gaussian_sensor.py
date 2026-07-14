@@ -129,7 +129,7 @@ class GaussianSensorData:
     """MuJoCo foreground [num_envs, H, W, 3] (uint8). None if not enabled."""
 
     mask: torch.Tensor | None = None
-    """Robot mask [num_envs, H, W, 1] (float32). None if not enabled."""
+    """MuJoCo foreground opacity [num_envs, H, W, 1]. None if not enabled."""
 
 
 class GaussianSensorMjlab(CameraSensor):
@@ -367,7 +367,7 @@ class GaussianSensorMjlab(CameraSensor):
         return (rgb_batch * 255).to(torch.uint8)
 
     def _render_mujoco_batch(self) -> tuple[torch.Tensor, torch.Tensor]:
-        """Pull batched RGB + segmentation already rendered by mjwarp.
+        """Pull batched foreground RGB, alpha, and segmentation from mjwarp.
 
         SensorContext writes per-camera rgb/segmentation into shared GPU
         buffers via a single batched warp kernel captured in the sense
@@ -375,7 +375,7 @@ class GaussianSensorMjlab(CameraSensor):
 
         Returns:
             foregrounds: (num_envs, H, W, 3) uint8
-            masks: (num_envs, H, W, 1) float32
+            masks: (num_envs, H, W, 1) float32 foreground opacity
         """
         if self._ctx is None:
             raise RuntimeError(
@@ -383,9 +383,10 @@ class GaussianSensorMjlab(CameraSensor):
                 "GaussianSensorMjlab must be attached to a mjlab Scene."
             )
 
-        rgb_batch = self._ctx.get_rgb(self._camera_idx)
+        rgb_batch = self._ctx.get_foreground_rgb(self._camera_idx)
+        alpha_batch = self._ctx.get_foreground_alpha(self._camera_idx)
         seg_batch = self._ctx.get_segmentation(self._camera_idx)
-        masks = self._create_robot_masks_batch(seg_batch)
+        masks = self._create_robot_masks_batch(seg_batch) * alpha_batch
         return rgb_batch, masks
 
     def _composite_batch(
@@ -396,7 +397,7 @@ class GaussianSensorMjlab(CameraSensor):
         Args:
             backgrounds: (N, H, W, 3) uint8
             foregrounds: (N, H, W, 3) uint8
-            masks: (N, H, W, 1) float32 [0, 1]
+            masks: (N, H, W, 1) float32 foreground opacity [0, 1]
 
         Returns:
             Composited RGB (N, H, W, 3) uint8
