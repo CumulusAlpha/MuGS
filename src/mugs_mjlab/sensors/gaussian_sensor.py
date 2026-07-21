@@ -63,6 +63,15 @@ class GaussianSensorMjlabCfg(CameraSensorCfg):
     background_ply_path: Path | None = None
     """Path to pretrained 3DGS PLY file."""
 
+    background_frame_body_name: str | None = None
+    """Body whose frame defines the canonical 3DGS scene coordinates.
+
+    Multi-environment MJLab scenes translate each environment away from the
+    origin. Set this to a fixed scene body that receives the same environment
+    transform so Gaussian camera poses can be converted back to the canonical
+    frame before rasterization.
+    """
+
     # Rendering mode
     render_mode: RenderMode = "hybrid"
     """Rendering mode: hybrid (3DGS+MuJoCo), 3dgs_only, or mujoco_only."""
@@ -160,6 +169,7 @@ class GaussianSensorMjlab(CameraSensor):
         self._gaussians: dict[str, torch.Tensor] | None = None
         self._cached_background: torch.Tensor | None = None
         self._cached_camera_poses: torch.Tensor | None = None
+        self._background_frame_body_idx: int | None = None
 
         # Robot mask cache (populated in initialize).
         self._robot_geom_ids: list[int] = []
@@ -182,6 +192,20 @@ class GaussianSensorMjlab(CameraSensor):
         self._mjwarp_data = data
         self._device = device
         self._num_envs = data.nworld
+
+        if self.cfg.background_frame_body_name is not None:
+            body_idx = mujoco.mj_name2id(
+                mj_model,
+                mujoco.mjtObj.mjOBJ_BODY,
+                self.cfg.background_frame_body_name,
+            )
+            if body_idx < 0:
+                available = [mj_model.body(i).name for i in range(mj_model.nbody)]
+                raise ValueError(
+                    f"Background frame body {self.cfg.background_frame_body_name!r} "
+                    f"was not found. Available bodies: {available}"
+                )
+            self._background_frame_body_idx = body_idx
 
         print(
             f"[GaussianSensorMjlab] Initializing for {self._num_envs} envs"
@@ -433,6 +457,18 @@ class GaussianSensorMjlab(CameraSensor):
         cam_mat_all = self._as_torch(self._mjwarp_data.cam_xmat)  # (N, ncam, 3, 3)
         cam_pos = cam_pos_all[:, self._camera_idx, :]  # (N, 3)
         rot_matrices = cam_mat_all[:, self._camera_idx, :, :]  # (N, 3, 3)
+
+        if self._background_frame_body_idx is not None:
+            body_pos_all = self._as_torch(self._mjwarp_data.xpos)
+            body_mat_all = self._as_torch(self._mjwarp_data.xmat)
+            frame_pos = body_pos_all[:, self._background_frame_body_idx, :]
+            frame_rot = body_mat_all[:, self._background_frame_body_idx, :, :]
+            world_to_frame_rot = frame_rot.transpose(-1, -2)
+            cam_pos = torch.bmm(
+                world_to_frame_rot,
+                (cam_pos - frame_pos).unsqueeze(-1),
+            ).squeeze(-1)
+            rot_matrices = torch.bmm(world_to_frame_rot, rot_matrices)
 
         poses = (
             torch.eye(4, device=self._device)
